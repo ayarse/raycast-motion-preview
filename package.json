@@ -1,0 +1,48 @@
+{
+  "$schema": "https://www.raycast.com/schemas/extension.json",
+  "name": "motion-preview",
+  "title": "Motion Preview",
+  "description": "Preview Animations",
+  "icon": "command-icon.png",
+  "author": "ayarse",
+  "categories": [
+    "Developer Tools",
+    "Design Tools",
+    "Productivity"
+  ],
+  "license": "MIT",
+  "commands": [
+    {
+      "name": "preview-animation",
+      "title": "Preview Lottie Animation",
+      "subtitle": "Select a Lottie Animation in Finder to preview",
+      "description": "Loads the currently selected file in Finder into a Lottie Player. Supports JSON and dotLottie files.",
+      "mode": "no-view"
+    }
+  ],
+  "dependencies": {
+    "@raycast/api": "^1.69.0",
+    "@raycast/utils": "^1.13.3",
+    "execa": "^9.3.0",
+    "stream-chain": "^2.2.5",
+    "stream-json": "^1.8.0"
+  },
+  "devDependencies": {
+    "@raycast/eslint-config": "^1.0.6",
+    "@types/node": "20.8.10",
+    "@types/react": "18.2.27",
+    "@types/stream-chain": "^2.1.0",
+    "@types/stream-json": "^1.7.7",
+    "eslint": "^8.51.0",
+    "prettier": "^3.0.3",
+    "typescript": "^5.2.2"
+  },
+  "scripts": {
+    "build:swift": "swift build --configuration=release && cp .build/release/rc-lottie-preview ./assets/bin/rc-lottie-preview",
+    "build": "npm run build:swift && ray build -e dist",
+    "dev": "ray develop",
+    "fix-lint": "ray lint --fix",
+    "lint": "ray lint",
+    "publish": "npx @raycast/api@latest publish"
+  }
+}
