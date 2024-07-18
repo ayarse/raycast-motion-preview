@@ -3,14 +3,10 @@ import SwiftUI
 import WebKit
 
 class FloatingWindow: NSPanel {
-    override var canBecomeKey: Bool {
-        return true
-    }
-
-    override var canBecomeMain: Bool {
-        return true
-    }
+    override var canBecomeKey: Bool { true }
+    override var canBecomeMain: Bool { true }
 }
+
 
 class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
     var window: FloatingWindow!
@@ -46,11 +42,13 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
         window.makeKeyAndOrderFront(nil)
         NSApp.activate(ignoringOtherApps: true)
         
-        // Set up a global event monitor for the Escape key
-        eventMonitor = NSEvent.addGlobalMonitorForEvents(matching: [.keyDown]) { event in
+        // Set up a local event monitor for the Escape key
+        eventMonitor = NSEvent.addLocalMonitorForEvents(matching: [.keyDown]) { event in
             if event.keyCode == 53 { // 53 is the key code for Escape
                 NSApplication.shared.terminate(nil)
+                return nil
             }
+            return event
         }
     }
 
