@@ -1,4 +1,3 @@
-import Cocoa
 import SwiftUI
 import WebKit
 
@@ -6,7 +5,6 @@ class FloatingWindow: NSPanel {
     override var canBecomeKey: Bool { true }
     override var canBecomeMain: Bool { true }
 }
-
 
 class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
     var window: FloatingWindow!
@@ -76,51 +74,42 @@ struct WebView: NSViewRepresentable {
 
     func makeNSView(context: Context) -> WKWebView {
         let webView = WKWebView()
-        webView.loadHTMLString(htmlContent, baseURL: nil)
+        loadHTMLContent(into: webView)
         return webView
     }
 
     func updateNSView(_ nsView: WKWebView, context: Context) {
-        nsView.loadHTMLString(htmlContent, baseURL: nil)
+        loadHTMLContent(into: nsView)
     }
 
-    private var htmlContent: String {
+    private func loadHTMLContent(into webView: WKWebView) {
+        let htmlContent = getHTMLContent()
+        webView.loadHTMLString(htmlContent, baseURL: nil)
+    }
+
+    private func getHTMLContent() -> String {
         let base64Data = fileContent.base64EncodedString()
         let dataType = isJson ? "json" : "arraybuffer"
         
-        return """
-        <html>
-        <head>
-            <style>
-                body { margin: 0; display: flex; justify-content: center; align-items: center; height: 100vh; background-color: transparent; }
-                #dotlottie-canvas { width: 100%; height: 100%; max-width: 500px; max-height: 500px; }
-            </style>
-        </head>
-        <body>
-            <canvas id="dotlottie-canvas"></canvas>
-            <script type="module">
-                import { DotLottie } from "https://cdn.jsdelivr.net/npm/@lottiefiles/dotlottie-web@0.28.0/+esm";
-
-                const canvas = document.getElementById('dotlottie-canvas');
-                const base64Data = "\(base64Data)";
-                const binaryString = atob(base64Data);
-                const len = binaryString.length;
-                const bytes = new Uint8Array(len);
-                for (let i = 0; i < len; i++) {
-                    bytes[i] = binaryString.charCodeAt(i);
-                }
-                const data = "\(dataType)" === "json" ? JSON.parse(new TextDecoder().decode(bytes)) : bytes.buffer;
-
-                new DotLottie({
-                    canvas,
-                    data,
-                    loop: true,
-                    autoplay: true
-                });
-            </script>
-        </body>
-        </html>
-        """
+        guard let executablePath = Bundle.main.executablePath else {
+            fatalError("Unable to determine executable path")
+        }
+        
+        let executableURL = URL(fileURLWithPath: executablePath)
+        let parentDirectoryURL = executableURL.deletingLastPathComponent().deletingLastPathComponent()
+        let htmlFileURL = parentDirectoryURL.appendingPathComponent("preview_lottie.html")
+        
+        do {
+            var htmlContent = try String(contentsOf: htmlFileURL, encoding: .utf8)
+            
+            // Replace placeholders in the HTML template
+            htmlContent = htmlContent.replacingOccurrences(of: "{{BASE64_DATA}}", with: base64Data)
+            htmlContent = htmlContent.replacingOccurrences(of: "{{DATA_TYPE}}", with: dataType)
+            
+            return htmlContent
+        } catch {
+            fatalError("Error reading HTML file: \(error). Looked for file at: \(htmlFileURL.path)")
+        }
     }
 }
 
