@@ -2,7 +2,7 @@ import Cocoa
 import SwiftUI
 import WebKit
 
-class ForegroundWindow: NSWindow {
+class FloatingWindow: NSPanel {
     override var canBecomeKey: Bool {
         return true
     }
@@ -13,44 +13,45 @@ class ForegroundWindow: NSWindow {
 }
 
 class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
-    var window: ForegroundWindow!
+    var window: FloatingWindow!
     var initialFileContent: (data: Data, isJson: Bool)?
+    var eventMonitor: Any?
 
     func applicationDidFinishLaunching(_ aNotification: Notification) {
         print("Application did finish launching")
         
         // Create the SwiftUI view that provides the window contents.
-        let contentView = ContentView(initialFileContent: initialFileContent)
+        let contentView = ContentView(initialFileContent: initialFileContent) {
+            NSApplication.shared.terminate(nil)
+        }
 
-        // Calculate the window size
-        let windowWidth: CGFloat = 600
-        let windowHeight: CGFloat = 600
+        // Calculate the window size to cover the entire screen
+        guard let screen = NSScreen.main else { return }
+        let windowFrame = screen.frame
 
         // Create the window and set the content view.
-        window = ForegroundWindow(
-            contentRect: NSRect(x: 0, y: 0, width: windowWidth, height: windowHeight),
-            styleMask: [.titled, .closable, .miniaturizable, .resizable],
+        window = FloatingWindow(
+            contentRect: windowFrame,
+            styleMask: [.borderless, .nonactivatingPanel],
             backing: .buffered, defer: false)
-        window.title = "Raycast Lottie Preview"
+        window.level = .floating
+        window.backgroundColor = .clear
+        window.isOpaque = false
+        window.hasShadow = false
         window.contentView = NSHostingView(rootView: contentView)
         window.delegate = self
         
-        centerWindow()
-        
-        print("Window created and centered")
+        print("Window created")
 
         window.makeKeyAndOrderFront(nil)
         NSApp.activate(ignoringOtherApps: true)
-    }
-
-    func centerWindow() {
-        guard let screen = NSScreen.main else { return }
-        let screenFrame = screen.visibleFrame
-        let windowFrame = window.frame
-        let newOriginX = screenFrame.midX - windowFrame.width / 2
-        let newOriginY = screenFrame.midY - windowFrame.height / 2
-        let newOrigin = CGPoint(x: newOriginX, y: newOriginY)
-        window.setFrameOrigin(newOrigin)
+        
+        // Set up a global event monitor for the Escape key
+        eventMonitor = NSEvent.addGlobalMonitorForEvents(matching: [.keyDown]) { event in
+            if event.keyCode == 53 { // 53 is the key code for Escape
+                NSApplication.shared.terminate(nil)
+            }
+        }
     }
 
     func applicationDidBecomeActive(_ notification: Notification) {
@@ -60,6 +61,9 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
 
     func applicationWillTerminate(_ aNotification: Notification) {
         print("Application will terminate")
+        if let eventMonitor = eventMonitor {
+            NSEvent.removeMonitor(eventMonitor)
+        }
     }
 
     func windowWillClose(_ notification: Notification) {
@@ -90,14 +94,14 @@ struct WebView: NSViewRepresentable {
         <html>
         <head>
             <style>
-                body { margin: 0; display: flex; justify-content: center; align-items: center; height: 100vh; background-color: #f0f0f0; }
+                body { margin: 0; display: flex; justify-content: center; align-items: center; height: 100vh; background-color: transparent; }
                 #dotlottie-canvas { width: 100%; height: 100%; max-width: 500px; max-height: 500px; }
             </style>
         </head>
         <body>
             <canvas id="dotlottie-canvas"></canvas>
             <script type="module">
-                import { DotLottie } from "https://esm.sh/@lottiefiles/dotlottie-web";
+                import { DotLottie } from "https://cdn.jsdelivr.net/npm/@lottiefiles/dotlottie-web@0.28.0/+esm";
 
                 const canvas = document.getElementById('dotlottie-canvas');
                 const base64Data = "\(base64Data)";
@@ -125,15 +129,29 @@ struct WebView: NSViewRepresentable {
 struct ContentView: View {
     let fileContent: Data
     let isJson: Bool
+    let closeAction: () -> Void
 
-    init(initialFileContent: (data: Data, isJson: Bool)?) {
+    init(initialFileContent: (data: Data, isJson: Bool)?, closeAction: @escaping () -> Void) {
         self.fileContent = initialFileContent?.data ?? Data()
         self.isJson = initialFileContent?.isJson ?? true
+        self.closeAction = closeAction
     }
 
     var body: some View {
-        WebView(fileContent: fileContent, isJson: isJson)
-            .frame(width: 500, height: 500)
+        ZStack {
+            Color.black.opacity(0.5)
+                .edgesIgnoringSafeArea(.all)
+                .onTapGesture {
+                    closeAction()
+                }
+            
+            WebView(fileContent: fileContent, isJson: isJson)
+                .frame(width: 500, height: 500)
+                .background(Color.white)
+                .cornerRadius(20)
+                .shadow(radius: 10)
+        }
+        .edgesIgnoringSafeArea(.all)
     }
 }
 
@@ -158,8 +176,8 @@ struct MainApp {
         let app = NSApplication.shared
         app.delegate = delegate
         
-        // Activate the app and show it in the dock
-        app.setActivationPolicy(.regular)
+        // Activate the app but don't show it in the dock
+        app.setActivationPolicy(.accessory)
         app.activate(ignoringOtherApps: true)
         
         app.run()
