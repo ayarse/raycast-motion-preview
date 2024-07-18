@@ -26,7 +26,7 @@ export const getFocusFinderPath = async () => {
   }
 };
 
-export const hasExt = (path: string, ext: string) => {
-  console.log(path, ext, path.endsWith(`.${ext}`));
-  return path.endsWith(`.${ext}`);
+export const hasExt = (path: string, exts: string | string[]) => {
+  const extensions = Array.isArray(exts) ? exts : [exts];
+  return extensions.some((ext) => path.endsWith(`.${ext}`));
 };

@@ -12,7 +12,7 @@ const PreviewLottieJson = async () => {
     return;
   }
 
-  if (!hasExt(currentFile, "json") && !hasExt(currentFile, "lottie")) {
+  if (!hasExt(currentFile, ["lottie", "json"])) {
     await showHUD("Invalid file type");
     return;
   }
