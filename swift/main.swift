@@ -8,7 +8,7 @@ class FloatingWindow: NSPanel {
 
 class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
     var window: FloatingWindow!
-    var initialFileContent: (data: Data, isJson: Bool)?
+    var initialFileContent: (data: Data, path: String)?
     var eventMonitor: Any?
 
     func applicationDidFinishLaunching(_ aNotification: Notification) {
@@ -70,7 +70,7 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
 
 struct WebView: NSViewRepresentable {
     var fileContent: Data
-    var isJson: Bool
+    var fileExtension: String
 
     func makeNSView(context: Context) -> WKWebView {
         let webView = WKWebView()
@@ -89,7 +89,6 @@ struct WebView: NSViewRepresentable {
 
     private func getHTMLContent() -> String {
         let base64Data = fileContent.base64EncodedString()
-        let dataType = isJson ? "json" : "arraybuffer"
         
         guard let executablePath = Bundle.main.executablePath else {
             fatalError("Unable to determine executable path")
@@ -97,7 +96,25 @@ struct WebView: NSViewRepresentable {
         
         let executableURL = URL(fileURLWithPath: executablePath)
         let parentDirectoryURL = executableURL.deletingLastPathComponent().deletingLastPathComponent()
-        let htmlFileURL = parentDirectoryURL.appendingPathComponent("preview_lottie.html")
+        
+        let htmlFileName: String
+        let dataType: String
+        
+        switch fileExtension.lowercased() {
+        case "riv":
+            htmlFileName = "preview_rive.html"
+            dataType = "arraybuffer"
+        case "json":
+            htmlFileName = "preview_lottie.html"
+            dataType = "json"
+        case "lottie":
+            htmlFileName = "preview_lottie.html"
+            dataType = "lottie"
+        default:
+            fatalError("Unsupported file type: \(fileExtension)")
+        }
+        
+        let htmlFileURL = parentDirectoryURL.appendingPathComponent(htmlFileName)
         
         do {
             var htmlContent = try String(contentsOf: htmlFileURL, encoding: .utf8)
@@ -115,12 +132,12 @@ struct WebView: NSViewRepresentable {
 
 struct ContentView: View {
     let fileContent: Data
-    let isJson: Bool
+    let fileExtension: String
     let closeAction: () -> Void
 
-    init(initialFileContent: (data: Data, isJson: Bool)?, closeAction: @escaping () -> Void) {
+    init(initialFileContent: (data: Data, path: String)?, closeAction: @escaping () -> Void) {
         self.fileContent = initialFileContent?.data ?? Data()
-        self.isJson = initialFileContent?.isJson ?? true
+        self.fileExtension = (initialFileContent?.path as NSString?)?.pathExtension ?? ""
         self.closeAction = closeAction
     }
 
@@ -132,7 +149,7 @@ struct ContentView: View {
                     closeAction()
                 }
             
-            WebView(fileContent: fileContent, isJson: isJson)
+            WebView(fileContent: fileContent, fileExtension: fileExtension)
                 .frame(width: 500, height: 500)
                 .background(Color.white)
                 .cornerRadius(20)
@@ -150,8 +167,7 @@ struct MainApp {
         if CommandLine.arguments.count > 1 {
             let filePath = CommandLine.arguments[1]
             if let fileContent = try? Data(contentsOf: URL(fileURLWithPath: filePath)) {
-                let isJson = filePath.lowercased().hasSuffix(".json")
-                delegate.initialFileContent = (fileContent, isJson)
+                delegate.initialFileContent = (fileContent, filePath)
                 print("File loaded successfully")
             } else {
                 print("Failed to load file")
