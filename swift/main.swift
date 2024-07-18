@@ -150,7 +150,7 @@ struct ContentView: View {
                 }
             
             WebView(fileContent: fileContent, fileExtension: fileExtension)
-                .frame(width: 500, height: 500)
+                .frame(width: 550, height: 550)
                 .background(Color.white)
                 .cornerRadius(20)
                 .shadow(radius: 10)
