@@ -1,8 +1,8 @@
 {
   "$schema": "https://www.raycast.com/schemas/extension.json",
-  "name": "motion-preview",
+  "name": "raycast-motion-preview",
   "title": "Motion Preview",
-  "description": "Preview Lottie and Rive Animations",
+  "description": "Preview Lottie and Rive Animations in Raycast",
   "icon": "command-icon.png",
   "author": "ayarse",
   "categories": [
@@ -16,7 +16,7 @@
       "name": "preview-animation",
       "title": "Preview Animation",
       "subtitle": "Preview a Lottie or Rive Animation file Selected in Finder",
-      "description": "Preview the currently selected file in Finder using a Web Player. Supports Lottie (both JSON and dotLottie formats) and Rive files.",
+      "description": "Quickly preview animation files in selected in Finder. Supports Lottie (JSON and dotLottie) and Rive files.",
       "mode": "no-view"
     }
   ],
