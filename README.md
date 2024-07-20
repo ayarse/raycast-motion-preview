@@ -11,8 +11,6 @@ Motion Preview is a Raycast extension that allows you to quickly preview modern 
 <a title="Install Motion Preview Raycast Extension" href="https://www.raycast.com/ayarse/motion-preview"><img src="https://www.raycast.com/ayarse/motion-preview/install_button@2x.png" style="height: 64px;" alt="" height="64"></a>
 </p>
 
----
-
 <img src="https://github.com/ayarse/raycast-motion-preview/blob/main/assets/screenshot.png?raw=true" style="max-width: 100%" />
 
 ---
