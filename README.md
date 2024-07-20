@@ -13,6 +13,10 @@ Motion Preview is a Raycast extension that allows you to quickly preview modern 
 
 ---
 
+<img src="https://github.com/ayarse/raycast-motion-preview/blob/main/assets/screenshot.png?raw=true" style="max-width: 100%" />
+
+---
+
 ## Features
 
 - Preview Lottie animations (JSON and dotLottie)
