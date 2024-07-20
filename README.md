@@ -39,7 +39,7 @@ The easiest way to install this extension is using the Raycast Store. Alternativ
 
 ## Support
 
-For any issues or feature requests, please open an issue on the [GitHub repository](https://github.com/ayarse/motion-preview).
+For any issues or feature requests, please open an issue on the [GitHub repository](https://github.com/ayarse/raycast-motion-preview).
 
 ## License
 
