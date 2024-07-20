@@ -2,13 +2,13 @@
 import PackageDescription
 
 let package = Package(
-  name: "RcLottiePreview",
+  name: "RcMotionPreview",
   platforms: [
     .macOS(.v12),
   ],
   targets: [
     .executableTarget(
-      name: "rc-lottie-preview",
+      name: "rc-motion-preview",
       dependencies: [],
       path: "swift"
     ),

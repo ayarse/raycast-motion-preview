@@ -35,7 +35,7 @@ const PreviewLottieJson = async () => {
     return;
   }
 
-  const command = join(environment.assetsPath, "bin/rc-lottie-preview");
+  const command = join(environment.assetsPath, "bin/rc-motion-preview");
   chmodSync(command, 0o755);
   execa(command, [currentFile]);
 };

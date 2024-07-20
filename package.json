@@ -15,7 +15,7 @@
     {
       "name": "preview-animation",
       "title": "Preview Animation",
-      "subtitle": "Select a Lottie or Rive Animation in Finder",
+      "subtitle": "Preview a Lottie or Rive Animation file Selected in Finder",
       "description": "Preview the currently selected file in Finder using a Web Player. Supports Lottie (both JSON and dotLottie formats) and Rive files.",
       "mode": "no-view"
     }
@@ -38,7 +38,7 @@
     "typescript": "^5.2.2"
   },
   "scripts": {
-    "build:swift": "swift build --configuration=release && cp .build/release/rc-lottie-preview ./assets/bin/rc-lottie-preview",
+    "build:swift": "swift build --configuration=release && cp .build/release/rc-motion-preview ./assets/bin/rc-motion-preview",
     "build": "npm run build:swift && ray build -e dist",
     "dev": "ray develop",
     "fix-lint": "ray lint --fix",
