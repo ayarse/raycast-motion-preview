@@ -27,10 +27,10 @@ export const isValidLottie = async (path: string): Promise<boolean> => {
     fs.createReadStream(path),
     parser(),
     (data) => {
-      if (openArrayCount > 0) return null;
-      if (data.name === "startArray") openArrayCount++;
-      if (data.name === "endArray") openArrayCount--;
-      return data;
+      if (data.name === "startArray") { openArrayCount++; return null; }
+      if (data.name === "endArray") { openArrayCount--; return null; }
+
+      return openArrayCount > 0 ? null : data;
     },
     streamObject(),
   ]);
