@@ -32,9 +32,8 @@ The easiest way to install this extension is using the Raycast Store. Alternativ
 ## Usage
 
 1. Select a Lottie JSON, dotLottie, or Rive animation file in Finder.
-2. Open Raycast.
-3. Find the "Preview Animation" command.
-4. Click anywhere or press `Esc` to close the preview.
+2. Go to Raycast and run the "Preview Animation" command.
+3. Click anywhere or press `Esc` to close the preview.
 
 ## Support
 
