@@ -1,5 +1,5 @@
 <p align="center">
-<img width=100 src="https://github.com/ayarse/blob/main/assets/command-icon.png">
+<img width=100 src="https://github.com/ayarse/raycast-motion-preview/blob/main/assets/command-icon.png?raw=true">
 </p>
 
 <h1 align="center">Motion Preview for Raycast</h1>
