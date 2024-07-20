@@ -21,21 +21,21 @@
     }
   ],
   "dependencies": {
-    "@raycast/api": "^1.69.0",
-    "@raycast/utils": "^1.13.3",
+    "@raycast/api": "^1.79.1",
+    "@raycast/utils": "^1.16.2",
     "execa": "^9.3.0",
     "stream-chain": "^2.2.5",
     "stream-json": "^1.8.0"
   },
   "devDependencies": {
-    "@raycast/eslint-config": "^1.0.6",
+    "@raycast/eslint-config": "^1.0.8",
     "@types/node": "20.8.10",
-    "@types/react": "18.2.27",
+    "@types/react": "18.3.3",
     "@types/stream-chain": "^2.1.0",
     "@types/stream-json": "^1.7.7",
-    "eslint": "^8.51.0",
-    "prettier": "^3.0.3",
-    "typescript": "^5.2.2"
+    "eslint": "^8.57.0",
+    "prettier": "^3.2.5",
+    "typescript": "^5.4.5"
   },
   "scripts": {
     "build:swift": "swift build --configuration=release && cp .build/release/rc-motion-preview ./assets/bin/rc-motion-preview",
