@@ -45,7 +45,7 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
         // Set up a local event monitor for the Escape key
         eventMonitor = NSEvent.addLocalMonitorForEvents(matching: [.keyDown]) { event in
             if event.keyCode == 53 { // 53 is the key code for Escape
-                NSApplication.shared.terminate(nil)
+                self.terminateApp()
                 return nil
             }
             return event
@@ -53,20 +53,24 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
     }
 
     func applicationDidBecomeActive(_ notification: Notification) {
-        print("Application became active")
         window.makeKeyAndOrderFront(nil)
     }
 
     func applicationWillTerminate(_ aNotification: Notification) {
-        print("Application will terminate")
         if let eventMonitor = eventMonitor {
             NSEvent.removeMonitor(eventMonitor)
         }
     }
 
     func windowWillClose(_ notification: Notification) {
-        print("Window will close")
-        NSApplication.shared.terminate(self)
+        terminateApp()
+    }
+
+    func terminateApp() {
+        if let eventMonitor = eventMonitor {
+            NSEvent.removeMonitor(eventMonitor)
+        }
+        NSApplication.shared.terminate(nil)
     }
 }
 
@@ -163,7 +167,6 @@ struct ContentView: View {
 
 @raycast func previewFile(filePath: String) {
     guard !filePath.isEmpty else {
-        print("File path is empty. Exiting.")
         return
     }
 
@@ -171,9 +174,8 @@ struct ContentView: View {
     
     if let fileContent = try? Data(contentsOf: URL(fileURLWithPath: filePath)) {
         delegate.initialFileContent = (fileContent, filePath)
-        print("File loaded successfully")
     } else {
-        print("Failed to load file")
+        return  // Exit if file loading fails
     }
     
     let app = NSApplication.shared

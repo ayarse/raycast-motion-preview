@@ -33,7 +33,12 @@ const PreviewLottieJson = async () => {
     return;
   }
 
-  previewFile(currentFile);
+  try {
+    await previewFile(currentFile);
+  } catch (e) {
+    console.log(e);
+    //
+  }
 };
 
 export default PreviewLottieJson;
