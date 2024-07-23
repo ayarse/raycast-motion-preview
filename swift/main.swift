@@ -1,3 +1,5 @@
+import Cocoa
+import RaycastSwiftMacros
 import SwiftUI
 import WebKit
 
@@ -159,30 +161,27 @@ struct ContentView: View {
     }
 }
 
-@main
-struct MainApp {
-    static func main() {
-        let delegate = AppDelegate()
-        
-        if CommandLine.arguments.count > 1 {
-            let filePath = CommandLine.arguments[1]
-            if let fileContent = try? Data(contentsOf: URL(fileURLWithPath: filePath)) {
-                delegate.initialFileContent = (fileContent, filePath)
-                print("File loaded successfully")
-            } else {
-                print("Failed to load file")
-            }
-        } else {
-            print("No file path provided")
-        }
-        
-        let app = NSApplication.shared
-        app.delegate = delegate
-        
-        // Activate the app but don't show it in the dock
-        app.setActivationPolicy(.accessory)
-        app.activate(ignoringOtherApps: true)
-        
-        app.run()
+@raycast func previewFile(filePath: String) {
+    guard !filePath.isEmpty else {
+        print("File path is empty. Exiting.")
+        return
     }
+
+    let delegate = AppDelegate()
+    
+    if let fileContent = try? Data(contentsOf: URL(fileURLWithPath: filePath)) {
+        delegate.initialFileContent = (fileContent, filePath)
+        print("File loaded successfully")
+    } else {
+        print("Failed to load file")
+    }
+    
+    let app = NSApplication.shared
+    app.delegate = delegate
+    
+    // Activate the app but don't show it in the dock
+    app.setActivationPolicy(.accessory)
+    app.activate(ignoringOtherApps: true)
+    
+    app.run()
 }
