@@ -4,6 +4,8 @@
 
 <h1 align="center">Motion Preview for Raycast</h1>
 <h4 align="center">
+  <a title="Install Motion Preview Extension" href="https://www.raycast.com/ayarse/raycast-motion-preview"><img src="https://www.raycast.com/ayarse/raycast-motion-preview/install_button@2x.png" style="height: 64px;" alt="" height="64"></a>
+
 Motion Preview is a Raycast extension that allows you to quickly preview modern animation formats. It supports both Lottie (JSON and dotLottie) and Rive file formats.
 </h4>
 
