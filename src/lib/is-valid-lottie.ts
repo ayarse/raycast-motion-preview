@@ -26,7 +26,7 @@ export const isValidLottie = async (path: string): Promise<boolean> => {
   const pipeline = chain([
     fs.createReadStream(path),
     parser(),
-    (data) => {
+    (data: { name: string }) => {
       if (data.name === "startArray") {
         openArrayCount++;
         return null;
