@@ -1,7 +1,8 @@
 import fs from "fs";
 import { chain } from "stream-chain";
 import { parser } from "stream-json";
-import { streamObject } from "stream-json/streamers/streamObject";
+import type { Token } from "stream-json/parser.js";
+import { streamObject } from "stream-json/streamers/stream-object.js";
 
 type Validator = (value: unknown) => boolean;
 
@@ -26,7 +27,7 @@ export const isValidLottie = async (path: string): Promise<boolean> => {
   const pipeline = chain([
     fs.createReadStream(path),
     parser(),
-    (data: { name: string }) => {
+    (data: Token) => {
       if (data.name === "startArray") {
         openArrayCount++;
         return null;
