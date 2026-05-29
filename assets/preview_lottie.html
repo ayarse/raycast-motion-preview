@@ -20,7 +20,7 @@
   <body>
     <canvas id="dotlottie-canvas"></canvas>
     <script type="module">
-      import { DotLottie } from "https://cdn.jsdelivr.net/npm/@lottiefiles/dotlottie-web@0.28.0/+esm";
+      import { DotLottie } from "https://cdn.jsdelivr.net/npm/@lottiefiles/dotlottie-web@0.74.0/+esm";
 
       const canvas = document.getElementById("dotlottie-canvas");
       const base64Data = "{{BASE64_DATA}}";
@@ -30,7 +30,8 @@
       for (let i = 0; i < len; i++) {
         bytes[i] = binaryString.charCodeAt(i);
       }
-      const data = "{{DATA_TYPE}}" === "json" ? JSON.parse(new TextDecoder().decode(bytes)) : bytes.buffer;
+      // `data` expects a Lottie JSON string, or an ArrayBuffer for .lottie files.
+      const data = "{{DATA_TYPE}}" === "json" ? new TextDecoder().decode(bytes) : bytes.buffer;
 
       new DotLottie({
         canvas,
