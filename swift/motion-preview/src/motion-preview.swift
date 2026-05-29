@@ -3,187 +3,242 @@ import RaycastSwiftMacros
 import SwiftUI
 import WebKit
 
-class FloatingWindow: NSPanel {
+// MARK: - Model
+
+/// A motion file format the previewer knows how to render.
+private enum MotionFileType {
+    case rive
+    case lottieJSON
+    case dotLottie
+
+    init?(fileExtension: String) {
+        switch fileExtension.lowercased() {
+        case "riv": self = .rive
+        case "json": self = .lottieJSON
+        case "lottie": self = .dotLottie
+        default: return nil
+        }
+    }
+
+    /// HTML template bundled alongside the executable.
+    var templateName: String {
+        switch self {
+        case .rive: "preview_rive.html"
+        case .lottieJSON, .dotLottie: "preview_lottie.html"
+        }
+    }
+
+    /// Value substituted for the template's `{{DATA_TYPE}}` placeholder.
+    var dataType: String {
+        switch self {
+        case .rive: "arraybuffer"
+        case .lottieJSON: "json"
+        case .dotLottie: "lottie"
+        }
+    }
+}
+
+/// An immutable, ready-to-render preview payload.
+private struct PreviewDocument {
+    let data: Data
+    let type: MotionFileType
+}
+
+// MARK: - Errors
+
+private enum PreviewError: LocalizedError {
+    case emptyPath
+    case unsupportedType(String)
+    case unreadableFile(String)
+    case missingTemplate(String)
+
+    var errorDescription: String? {
+        switch self {
+        case .emptyPath:
+            "No file path was provided."
+        case .unsupportedType(let ext):
+            "Unsupported file type: .\(ext)"
+        case .unreadableFile(let path):
+            "Could not read file at \(path)."
+        case .missingTemplate(let name):
+            "Could not load preview template \(name)."
+        }
+    }
+}
+
+// MARK: - HTML rendering
+
+private enum HTMLRenderer {
+    /// Fills the bundled template for `document` with its base64 payload.
+    static func render(_ document: PreviewDocument) -> Result<String, PreviewError> {
+        do {
+            let template = try String(contentsOf: templateURL(for: document.type), encoding: .utf8)
+            let html =
+                template
+                .replacingOccurrences(of: "{{BASE64_DATA}}", with: document.data.base64EncodedString())
+                .replacingOccurrences(of: "{{DATA_TYPE}}", with: document.type.dataType)
+            return .success(html)
+        } catch let error as PreviewError {
+            return .failure(error)
+        } catch {
+            return .failure(.missingTemplate(document.type.templateName))
+        }
+    }
+
+    /// A standalone page shown when a template can't be loaded, so a render
+    /// failure surfaces in the window instead of crashing the process.
+    static func errorPage(_ error: PreviewError) -> String {
+        let message = (error.errorDescription ?? "Unable to render preview.")
+            .replacingOccurrences(of: "<", with: "&lt;")
+        return """
+        <!doctype html>
+        <html>
+          <head><meta charset="utf-8"></head>
+          <body style="margin:0;height:100vh;display:flex;align-items:center;justify-content:center;\
+        font-family:-apple-system,Arial,sans-serif;color:#333;text-align:center;padding:24px;box-sizing:border-box;">
+            <p>\(message)</p>
+          </body>
+        </html>
+        """
+    }
+
+    /// Templates live one directory above the executable, next to the bundle assets.
+    private static func templateURL(for type: MotionFileType) throws -> URL {
+        guard let executablePath = Bundle.main.executablePath else {
+            throw PreviewError.missingTemplate(type.templateName)
+        }
+        return URL(fileURLWithPath: executablePath)
+            .deletingLastPathComponent()
+            .deletingLastPathComponent()
+            .appendingPathComponent(type.templateName)
+    }
+}
+
+// MARK: - Views
+
+private struct MotionWebView: NSViewRepresentable {
+    let document: PreviewDocument
+
+    func makeNSView(context: Context) -> WKWebView {
+        let webView = WKWebView()
+        let html: String
+        switch HTMLRenderer.render(document) {
+        case .success(let rendered): html = rendered
+        case .failure(let error): html = HTMLRenderer.errorPage(error)
+        }
+        webView.loadHTMLString(html, baseURL: nil)
+        return webView
+    }
+
+    // The document is immutable, so there is nothing to reload after the initial load.
+    func updateNSView(_ nsView: WKWebView, context: Context) {}
+}
+
+private struct ContentView: View {
+    let document: PreviewDocument
+    let onClose: () -> Void
+
+    var body: some View {
+        ZStack {
+            Color.black.opacity(0.5)
+                .ignoresSafeArea()
+                .onTapGesture(perform: onClose)
+
+            MotionWebView(document: document)
+                .frame(width: 550, height: 550)
+                .background(Color.white)
+                .cornerRadius(20)
+                .shadow(radius: 10)
+        }
+        .ignoresSafeArea()
+    }
+}
+
+// MARK: - Window & app lifecycle
+
+private final class PreviewWindow: NSPanel {
     override var canBecomeKey: Bool { true }
     override var canBecomeMain: Bool { true }
 }
 
-class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
-    var window: FloatingWindow!
-    var initialFileContent: (data: Data, path: String)?
-    var eventMonitor: Any?
+private final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
+    private let document: PreviewDocument
+    private var window: PreviewWindow?
+    private var escapeMonitor: Any?
 
-    func applicationDidFinishLaunching(_ aNotification: Notification) {
-        print("Application did finish launching")
-        
-        // Create the SwiftUI view that provides the window contents.
-        let contentView = ContentView(initialFileContent: initialFileContent) {
-            NSApplication.shared.terminate(nil)
+    init(document: PreviewDocument) {
+        self.document = document
+    }
+
+    func applicationDidFinishLaunching(_ notification: Notification) {
+        let contentView = ContentView(document: document) { [weak self] in
+            self?.terminate()
         }
 
-        // Calculate the window size to cover the entire screen
-        guard let screen = NSScreen.main else { return }
-        let windowFrame = screen.frame
-
-        // Create the window and set the content view.
-        window = FloatingWindow(
-            contentRect: windowFrame,
+        let frame = NSScreen.main?.frame ?? NSRect(x: 0, y: 0, width: 800, height: 600)
+        let window = PreviewWindow(
+            contentRect: frame,
             styleMask: [.borderless, .nonactivatingPanel],
-            backing: .buffered, defer: false)
+            backing: .buffered,
+            defer: false
+        )
         window.level = .floating
         window.backgroundColor = .clear
         window.isOpaque = false
         window.hasShadow = false
         window.contentView = NSHostingView(rootView: contentView)
         window.delegate = self
-        
-        print("Window created")
+        self.window = window
 
         window.makeKeyAndOrderFront(nil)
         NSApp.activate(ignoringOtherApps: true)
-        
-        // Set up a local event monitor for the Escape key
-        eventMonitor = NSEvent.addLocalMonitorForEvents(matching: [.keyDown]) { event in
-            if event.keyCode == 53 { // 53 is the key code for Escape
-                self.terminateApp()
-                return nil
-            }
-            return event
+
+        // Dismiss on Escape.
+        escapeMonitor = NSEvent.addLocalMonitorForEvents(matching: [.keyDown]) { [weak self] event in
+            guard event.keyCode == 53 else { return event } // 53 == Escape
+            self?.terminate()
+            return nil
         }
     }
 
     func applicationDidBecomeActive(_ notification: Notification) {
-        window.makeKeyAndOrderFront(nil)
-    }
-
-    func applicationWillTerminate(_ aNotification: Notification) {
-        if let eventMonitor = eventMonitor {
-            NSEvent.removeMonitor(eventMonitor)
-        }
+        window?.makeKeyAndOrderFront(nil)
     }
 
     func windowWillClose(_ notification: Notification) {
-        terminateApp()
+        terminate()
     }
 
-    func terminateApp() {
-        if let eventMonitor = eventMonitor {
-            NSEvent.removeMonitor(eventMonitor)
+    private func terminate() {
+        if let escapeMonitor {
+            NSEvent.removeMonitor(escapeMonitor)
+            self.escapeMonitor = nil
         }
         NSApplication.shared.terminate(nil)
     }
 }
 
-struct WebView: NSViewRepresentable {
-    var fileContent: Data
-    var fileExtension: String
+// MARK: - Raycast entry point
 
-    func makeNSView(context: Context) -> WKWebView {
-        let webView = WKWebView()
-        loadHTMLContent(into: webView)
-        return webView
-    }
-
-    func updateNSView(_ nsView: WKWebView, context: Context) {
-        loadHTMLContent(into: nsView)
-    }
-
-    private func loadHTMLContent(into webView: WKWebView) {
-        let htmlContent = getHTMLContent()
-        webView.loadHTMLString(htmlContent, baseURL: nil)
-    }
-
-    private func getHTMLContent() -> String {
-        let base64Data = fileContent.base64EncodedString()
-        
-        guard let executablePath = Bundle.main.executablePath else {
-            fatalError("Unable to determine executable path")
-        }
-        
-        let executableURL = URL(fileURLWithPath: executablePath)
-        let parentDirectoryURL = executableURL.deletingLastPathComponent().deletingLastPathComponent()
-        
-        let htmlFileName: String
-        let dataType: String
-        
-        switch fileExtension.lowercased() {
-        case "riv":
-            htmlFileName = "preview_rive.html"
-            dataType = "arraybuffer"
-        case "json":
-            htmlFileName = "preview_lottie.html"
-            dataType = "json"
-        case "lottie":
-            htmlFileName = "preview_lottie.html"
-            dataType = "lottie"
-        default:
-            fatalError("Unsupported file type: \(fileExtension)")
-        }
-        
-        let htmlFileURL = parentDirectoryURL.appendingPathComponent(htmlFileName)
-        
-        do {
-            var htmlContent = try String(contentsOf: htmlFileURL, encoding: .utf8)
-            
-            // Replace placeholders in the HTML template
-            htmlContent = htmlContent.replacingOccurrences(of: "{{BASE64_DATA}}", with: base64Data)
-            htmlContent = htmlContent.replacingOccurrences(of: "{{DATA_TYPE}}", with: dataType)
-            
-            return htmlContent
-        } catch {
-            fatalError("Error reading HTML file: \(error). Looked for file at: \(htmlFileURL.path)")
-        }
-    }
-}
-
-struct ContentView: View {
-    let fileContent: Data
-    let fileExtension: String
-    let closeAction: () -> Void
-
-    init(initialFileContent: (data: Data, path: String)?, closeAction: @escaping () -> Void) {
-        self.fileContent = initialFileContent?.data ?? Data()
-        self.fileExtension = (initialFileContent?.path as NSString?)?.pathExtension ?? ""
-        self.closeAction = closeAction
-    }
-
-    var body: some View {
-        ZStack {
-            Color.black.opacity(0.5)
-                .edgesIgnoringSafeArea(.all)
-                .onTapGesture {
-                    closeAction()
-                }
-            
-            WebView(fileContent: fileContent, fileExtension: fileExtension)
-                .frame(width: 550, height: 550)
-                .background(Color.white)
-                .cornerRadius(20)
-                .shadow(radius: 10)
-        }
-        .edgesIgnoringSafeArea(.all)
-    }
-}
-
-@raycast func previewFile(filePath: String) {
+@raycast func previewFile(filePath: String) throws {
     guard !filePath.isEmpty else {
-        return
+        throw PreviewError.emptyPath
     }
 
-    let delegate = AppDelegate()
-    
-    if let fileContent = try? Data(contentsOf: URL(fileURLWithPath: filePath)) {
-        delegate.initialFileContent = (fileContent, filePath)
-    } else {
-        return  // Exit if file loading fails
+    let fileExtension = (filePath as NSString).pathExtension
+    guard let fileType = MotionFileType(fileExtension: fileExtension) else {
+        throw PreviewError.unsupportedType(fileExtension)
     }
-    
+
+    guard let data = try? Data(contentsOf: URL(fileURLWithPath: filePath)) else {
+        throw PreviewError.unreadableFile(filePath)
+    }
+
+    let delegate = AppDelegate(document: PreviewDocument(data: data, type: fileType))
+
     let app = NSApplication.shared
     app.delegate = delegate
-    
-    // Activate the app but don't show it in the dock
-    app.setActivationPolicy(.accessory)
+    app.setActivationPolicy(.accessory) // Run as an accessory; no Dock icon.
     app.activate(ignoringOtherApps: true)
-    
     app.run()
 }
