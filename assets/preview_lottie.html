@@ -3,11 +3,20 @@
     <style>
       body {
         margin: 0;
+        height: 100vh;
+        display: flex;
+        flex-direction: column;
+        background-color: transparent;
+        overflow: hidden;
+        font-family: -apple-system, Arial, sans-serif;
+      }
+      .stage {
+        flex: 1;
+        min-height: 0;
         display: flex;
         justify-content: center;
         align-items: center;
-        height: 100vh;
-        background-color: transparent;
+        background-color: #ffffff;
       }
       #dotlottie-canvas {
         width: 100%;
@@ -15,10 +24,69 @@
         max-width: 500px;
         max-height: 500px;
       }
+      .controls {
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        gap: 12px;
+        padding: 12px 14px;
+        background-color: #f5f5f7;
+        border-top: 1px solid rgba(0, 0, 0, 0.08);
+      }
+      .control-label {
+        font-size: 13px;
+        color: #555;
+      }
+      .swatches {
+        display: flex;
+        gap: 10px;
+      }
+      .bg-swatch {
+        width: 22px;
+        height: 22px;
+        padding: 0;
+        border-radius: 50%;
+        border: 2px solid transparent;
+        cursor: pointer;
+        transition: transform 0.1s ease;
+      }
+      .bg-swatch:hover {
+        transform: scale(1.15);
+      }
+      .bg-swatch.active {
+        border-color: #333;
+      }
     </style>
   </head>
   <body>
-    <canvas id="dotlottie-canvas"></canvas>
+    <div class="stage">
+      <canvas id="dotlottie-canvas"></canvas>
+    </div>
+    <div class="controls">
+      <span class="control-label">Background</span>
+      <div class="swatches">
+        <button class="bg-swatch" style="background: #6666f6" data-color="#6666f6"></button>
+        <button class="bg-swatch" style="background: #6cade2" data-color="#6cade2"></button>
+        <button class="bg-swatch" style="background: #52a6ad" data-color="#52a6ad"></button>
+        <button class="bg-swatch" style="background: #ed7099" data-color="#ed7099"></button>
+        <button class="bg-swatch" style="background: #dfb75d" data-color="#dfb75d"></button>
+        <button class="bg-swatch" style="background: #ce5d52" data-color="#ce5d52"></button>
+        <button class="bg-swatch" style="background: #787faa" data-color="#787faa"></button>
+      </div>
+    </div>
+
+    <script>
+      const stage = document.querySelector(".stage");
+      const swatches = document.querySelectorAll(".bg-swatch");
+      swatches.forEach((swatch) => {
+        swatch.addEventListener("click", () => {
+          stage.style.backgroundColor = swatch.dataset.color;
+          swatches.forEach((s) => s.classList.remove("active"));
+          swatch.classList.add("active");
+        });
+      });
+    </script>
+
     <script type="module">
       import { DotLottie } from "https://cdn.jsdelivr.net/npm/@lottiefiles/dotlottie-web@0.74.0/+esm";
 
