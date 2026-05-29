@@ -7,11 +7,9 @@ if application "Finder" is not running then
 end if
 
 tell application "Finder"
-    set filePath to (POSIX path of (target of front window as alias))
-    set fileAlias to the selection as alias  
-    set fileName to name of fileAlias
-
-    return filePath & fileName
+    set sel to selection
+    if sel is {} then return ""
+    return POSIX path of (item 1 of sel as alias)
 end tell
 `;
 
@@ -21,6 +19,7 @@ export const getFocusFinderPath = async () => {
   } catch (e) {
     if (e instanceof Error) {
       await showHUD(`Error: ${e.message}`);
+      return;
     }
     await showHUD("An unknown error occurred");
   }
@@ -28,5 +27,6 @@ export const getFocusFinderPath = async () => {
 
 export const hasExt = (path: string, exts: string | string[]) => {
   const extensions = Array.isArray(exts) ? exts : [exts];
-  return extensions.some((ext) => path.endsWith(`.${ext}`));
+  const lowerPath = path.toLowerCase();
+  return extensions.some((ext) => lowerPath.endsWith(`.${ext.toLowerCase()}`));
 };
