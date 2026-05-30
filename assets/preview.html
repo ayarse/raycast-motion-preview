@@ -720,7 +720,7 @@
               try {
                 instance.cleanup();
               } catch (e) {}
-              off.getContext("webgl2")?.getExtension("WEBGL_lose_context")?.loseContext();
+              // The GL context is released below, after the timeout race, so it's freed on timeout/error too.
               return url;
             }
 

@@ -242,8 +242,8 @@ private final class PreviewSchemeHandler: NSObject, WKURLSchemeHandler {
 
     func webView(_ webView: WKWebView, stop task: WKURLSchemeTask) {}
 
-    // Maps a motion://app/<path> request to bytes: the rendered page, the folder manifest, a file's payload (/data or
-    // /data/<index>), or a vendored `lib/` asset — rejecting any path that tries to traverse out of the assets directory.
+    // Maps a motion://app/<path> request to bytes: the rendered page, the folder manifest, a file's payload
+    // (/data/<index>), or a vendored `lib/` asset — rejecting any path that tries to traverse out of the assets directory.
     private func payload(for url: URL) -> (data: Data, mimeType: String)? {
         switch url.path {
         case "", "/", "/index.html":
@@ -256,9 +256,6 @@ private final class PreviewSchemeHandler: NSObject, WKURLSchemeHandler {
 
         case "/manifest":
             return (manifestData(), "application/json")
-
-        case "/data":
-            return filePayload(at: library.current)
 
         default:
             if url.path.hasPrefix("/data/"), let index = Int(url.path.dropFirst("/data/".count)) {
