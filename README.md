@@ -16,10 +16,10 @@ Motion Preview is a Raycast extension that allows you to quickly preview modern 
 
 ## Features
 
-- Preview Lottie animations (JSON and dotLottie)
-- Preview Rive animations
-- Validates Lottie JSON files
-- Supports Rive State Machines.
+- Preview Rive, Lottie (JSON), and dotLottie animations
+- Switch between state machines
+- Playback and background color controls
+- Browse other animations in the same folder
 
 ## Installation
 
