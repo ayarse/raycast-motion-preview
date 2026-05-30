@@ -1,27 +1,12 @@
-import { showHUD } from "@raycast/api";
-import { runAppleScript } from "@raycast/utils";
+import { getSelectedFinderItems } from "@raycast/api";
 
-export const scriptFinderPath = `
-if application "Finder" is not running then
-    return "Finder not running"
-end if
-
-tell application "Finder"
-    set sel to selection
-    if sel is {} then return ""
-    return POSIX path of (item 1 of sel as alias)
-end tell
-`;
-
-export const getFocusFinderPath = async () => {
+export const getFocusFinderPath = async (): Promise<string | undefined> => {
   try {
-    return await runAppleScript(scriptFinderPath);
-  } catch (e) {
-    if (e instanceof Error) {
-      await showHUD(`Error: ${e.message}`);
-      return;
-    }
-    await showHUD("An unknown error occurred");
+    const [item] = await getSelectedFinderItems();
+    return item?.path;
+  } catch {
+    // No Finder selection (or Finder isn't available); the caller surfaces this.
+    return undefined;
   }
 };
 
