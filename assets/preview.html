@@ -37,11 +37,13 @@
         align-items: center;
         pointer-events: none;
       }
-      /* The frosted-glass preview area — the control bar attaches below it, not inside it. */
+      /* Frosted preview area, sized to the animation's own aspect ratio (--art-ratio, set on
+         load; square until then) — the largest such rectangle that fits the viewport. */
       .preview {
         pointer-events: auto;
-        width: 520px;
-        height: 520px;
+        --art-ratio: 1;
+        aspect-ratio: var(--art-ratio);
+        width: min(80vw, 760px, 72vh * var(--art-ratio));
         display: flex;
         justify-content: center;
         align-items: center;
@@ -62,12 +64,11 @@
         background-color: transparent;
       }
       #preview-canvas {
+        display: block;
         width: 100%;
         height: 100%;
-        max-width: 500px;
-        max-height: 500px;
       }
-      /* Carousel anchored just below the card (half the 550px card height + a gap), so the spacing stays constant on any screen size. */
+      /* Carousel sits in the column below the control bar, a constant gap from it on any screen size. */
       .track {
         pointer-events: auto;
         margin-top: 24px;
@@ -139,7 +140,7 @@
         pointer-events: auto;
         margin-top: 10px;
         box-sizing: border-box;
-        width: min(480px, calc(100% - 48px));
+        width: min(480px, 86vw);
         display: flex;
         align-items: center;
         gap: 12px;
@@ -394,14 +395,10 @@
     </script>
 
     <script>
-      // One template renders all three formats. The native scheme handler serves a
-      // manifest of the selected file's folder (each item carries a renderer marker:
-      // `arraybuffer` -> Rive, `json`/`lottie` -> dotLottie) plus each file's bytes at
-      // motion://app/data/<index>. The big stage plays one item at a time; a thumbnail
-      // track lets you flip through the rest like a carousel (also driven by the native
-      // arrow keys via window.__motionNav). Renderers are vendored under assets/lib and
-      // served by the motion:// scheme handler, so everything loads offline with no CDN.
+      // One template renders all three formats from the native manifest: the big stage plays
+      // one file, a thumbnail track flips through the folder. Runtimes are vendored, so it's offline.
       (async () => {
+        const preview = document.querySelector(".preview");
         const canvas = document.getElementById("preview-canvas");
         const playToggle = document.getElementById("play-toggle");
         const seeker = document.getElementById("seeker");
@@ -424,6 +421,12 @@
         };
 
         const nextPaint = () => new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(r)));
+
+        // Match the box to the animation's shape once known; square otherwise.
+        const setAspect = (width, height) => {
+          if (width > 0 && height > 0) preview.style.setProperty("--art-ratio", width / height);
+        };
+        const resetAspect = () => preview.style.setProperty("--art-ratio", "1");
 
         // Both runtimes may be needed when a folder mixes formats; load each lazily, once.
         const loadScript = (src) =>
@@ -454,6 +457,7 @@
         stateMachineSelect.addEventListener("change", (event) => main?.selectStateMachine(event.target.value));
 
         const resetControls = () => {
+          resetAspect();
           seeker.style.display = "";
           seeker.value = 0;
           seeker.style.background = "";
@@ -493,10 +497,13 @@
           const instance = new rive.Rive({
             buffer,
             canvas,
-            layout: new rive.Layout({ fit: rive.Fit.FitWidth, alignment: rive.Alignment.Center }),
+            layout: new rive.Layout({ fit: rive.Fit.Contain, alignment: rive.Alignment.Center }),
             autoplay: true,
             onLoad: () => {
-              instance.resizeDrawingSurfaceToCanvas();
+              // bounds is the artboard's AABB; resize the GL surface after the box reshapes.
+              const bounds = instance.bounds;
+              if (bounds) setAspect(bounds.maxX - bounds.minX, bounds.maxY - bounds.minY);
+              requestAnimationFrame(() => instance.resizeDrawingSurfaceToCanvas());
               updateStateMachines();
             },
           });
@@ -576,6 +583,10 @@
           };
 
           dotLottie.addEventListener("load", () => {
+            // Take the animation's own dimensions; dotLottie's canvas observer rescales the render.
+            Promise.resolve(dotLottie.animationSize?.()).then((size) => {
+              if (size) setAspect(size.width, size.height);
+            });
             seeker.max = dotLottie.totalFrames;
             updateSeekerFill();
 
@@ -680,8 +691,8 @@
           }
         }
 
-        // Renders a single still frame to an offscreen canvas, captures it as an <img>, and disposes the renderer.
-        // Returns null on failure or timeout so the thumb falls back to its filename label.
+        // Renders one still frame to an offscreen canvas as an <img>, then disposes the renderer.
+        // Returns null on failure/timeout so the thumb falls back to its filename label.
         async function renderThumb(item) {
           const off = document.createElement("canvas");
           off.width = 108;
@@ -767,8 +778,7 @@
           loadMain(next);
         };
 
-        // Called by the native side once the async folder scan finishes — rebuild the track,
-        // keeping the same file on the stage.
+        // Called by the native side after the folder scan — rebuild the track, keeping the current file.
         window.__motionRefresh = async () => {
           const shownName = items[current]?.name;
           await loadManifest();
