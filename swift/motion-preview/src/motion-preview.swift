@@ -162,7 +162,7 @@ private enum HTMLRenderer {
         <html>
           <head><meta charset="utf-8"></head>
           <body style="margin:0;height:100vh;display:flex;align-items:center;justify-content:center;\
-        font-family:-apple-system,Arial,sans-serif;color:#333;text-align:center;padding:24px;box-sizing:border-box;">
+        background:#fff;font-family:-apple-system,Arial,sans-serif;color:#333;text-align:center;padding:24px;box-sizing:border-box;">
             <p>\(message)</p>
           </body>
         </html>
@@ -255,7 +255,7 @@ private final class PreviewSchemeHandler: NSObject, WKURLSchemeHandler {
 
 // MARK: - Views
 
-// Hosts the WKWebView that loads the preview page from the custom scheme, falling back to the error page if assets are missing.
+// Hosts a transparent WKWebView that loads the preview page from the custom scheme, so the page's stage color (or none) shows through to the window; falls back to the error page if assets are missing.
 private struct MotionWebView: NSViewRepresentable {
     let document: PreviewDocument
 
@@ -273,6 +273,7 @@ private struct MotionWebView: NSViewRepresentable {
         configuration.setURLSchemeHandler(handler, forURLScheme: PreviewSchemeHandler.scheme)
 
         let webView = WKWebView(frame: .zero, configuration: configuration)
+        webView.setValue(false, forKey: "drawsBackground")
         if let baseURL = PreviewSchemeHandler.baseURL {
             webView.load(URLRequest(url: baseURL))
         }
@@ -295,7 +296,6 @@ private struct ContentView: View {
 
             MotionWebView(document: document)
                 .frame(width: 550, height: 550)
-                .background(Color.white)
                 .cornerRadius(20)
                 .shadow(radius: 10)
         }

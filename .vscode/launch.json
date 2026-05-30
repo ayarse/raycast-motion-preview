@@ -1,0 +1,24 @@
+{
+  "configurations": [
+    {
+      "type": "swift",
+      "request": "launch",
+      "args": [],
+      "cwd": "${workspaceFolder:raycast-motion-preview}/swift/motion-preview",
+      "name": "Debug motion-preview (swift/motion-preview)",
+      "target": "motion-preview",
+      "configuration": "debug",
+      "preLaunchTask": "swift: Build Debug motion-preview (swift/motion-preview)"
+    },
+    {
+      "type": "swift",
+      "request": "launch",
+      "args": [],
+      "cwd": "${workspaceFolder:raycast-motion-preview}/swift/motion-preview",
+      "name": "Release motion-preview (swift/motion-preview)",
+      "target": "motion-preview",
+      "configuration": "release",
+      "preLaunchTask": "swift: Build Release motion-preview (swift/motion-preview)"
+    }
+  ]
+}
