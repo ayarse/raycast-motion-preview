@@ -21,10 +21,7 @@
     }
   ],
   "dependencies": {
-    "@raycast/api": "^1.104.19",
-    "@raycast/utils": "^2.2.5",
-    "stream-chain": "^4.2.2",
-    "stream-json": "^3.3.0"
+    "@raycast/api": "^1.104.19"
   },
   "devDependencies": {
     "@raycast/eslint-config": "^2.1.1",

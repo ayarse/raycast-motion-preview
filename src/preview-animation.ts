@@ -1,9 +1,8 @@
 import { getFocusFinderPath, hasExt } from "./lib/util";
 import { showHUD } from "@raycast/api";
-import { isValidLottie } from "./lib/is-valid-lottie";
 import { previewFile } from "swift:../swift/motion-preview";
 
-const PreviewLottieJson = async () => {
+const PreviewAnimation = async () => {
   const currentFile = await getFocusFinderPath();
   if (!currentFile) {
     await showHUD("No file selected");
@@ -16,29 +15,26 @@ const PreviewLottieJson = async () => {
   }
 
   try {
-    if (hasExt(currentFile, "json")) {
-      const lottieValid = await isValidLottie(currentFile);
-
-      if (!lottieValid) {
-        await showHUD("Invalid Lottie JSON file");
-        return;
-      }
-    }
-  } catch (error) {
-    if (error instanceof Error) {
-      await showHUD(error.message);
-      return;
-    }
-    await showHUD("Invalid Lottie JSON file");
-    return;
-  }
-
-  try {
+    // Validation (for Lottie JSON), file reading, and rendering all happen in the
+    // Swift previewer, so the file is read once and any failure comes back here.
     await previewFile(currentFile);
-  } catch (e) {
-    console.log(e);
-    //
+  } catch (error) {
+    await showHUD(swiftErrorMessage(error) ?? "Could not preview animation");
   }
 };
 
-export default PreviewLottieJson;
+/** Extracts a readable message from a Swift-bridge error (stderr or message). */
+const swiftErrorMessage = (error: unknown): string | undefined => {
+  if (!error || typeof error !== "object") return undefined;
+  const { stderr, message } = error as { stderr?: unknown; message?: unknown };
+  if (typeof stderr === "string") {
+    const line = stderr
+      .split("\n")
+      .map((l) => l.trim())
+      .find(Boolean);
+    if (line) return line;
+  }
+  return typeof message === "string" && message.trim() ? message.trim() : undefined;
+};
+
+export default PreviewAnimation;
