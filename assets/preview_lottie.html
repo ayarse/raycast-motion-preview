@@ -87,26 +87,30 @@
       });
     </script>
 
-    <script type="module">
-      import { DotLottie } from "https://cdn.jsdelivr.net/npm/@lottiefiles/dotlottie-web@0.74.0/+esm";
+    <!-- dotLottie renderer, vendored locally under assets/lib and served by the
+         native motion:// scheme handler, so it loads instantly and offline with
+         no CDN round-trip. Exposes a global `DotLottie`. -->
+    <script src="motion://app/lib/dotlottie.js"></script>
+    <script>
+      (async () => {
+        // Use the vendored WASM binary instead of fetching it from a CDN.
+        DotLottie.setWasmUrl("motion://app/lib/dotlottie-player.wasm");
 
-      const canvas = document.getElementById("dotlottie-canvas");
-      const base64Data = "{{BASE64_DATA}}";
-      const binaryString = atob(base64Data);
-      const len = binaryString.length;
-      const bytes = new Uint8Array(len);
-      for (let i = 0; i < len; i++) {
-        bytes[i] = binaryString.charCodeAt(i);
-      }
-      // `data` expects a Lottie JSON string, or an ArrayBuffer for .lottie files.
-      const data = "{{DATA_TYPE}}" === "json" ? new TextDecoder().decode(bytes) : bytes.buffer;
+        const canvas = document.getElementById("dotlottie-canvas");
 
-      new DotLottie({
-        canvas,
-        data,
-        loop: true,
-        autoplay: true,
-      });
+        // The animation bytes are streamed in by the native scheme handler;
+        // nothing is base64-inlined into this document.
+        const response = await fetch("motion://app/data");
+        // `data` expects a Lottie JSON string, or an ArrayBuffer for .lottie files.
+        const data = "{{DATA_TYPE}}" === "json" ? await response.text() : await response.arrayBuffer();
+
+        new DotLottie({
+          canvas,
+          data,
+          loop: true,
+          autoplay: true,
+        });
+      })();
     </script>
   </body>
 </html>

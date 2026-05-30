@@ -111,83 +111,86 @@
       });
     </script>
 
-    <script type="module">
-      import rive from "https://cdn.jsdelivr.net/npm/@rive-app/canvas@2.37.8/+esm";
+    <!-- Rive renderer, vendored locally under assets/lib and served by the native
+         motion:// scheme handler, so it loads instantly and offline with no CDN
+         round-trip. The UMD build exposes a global `rive`. -->
+    <script src="motion://app/lib/rive.js"></script>
+    <script>
+      (async () => {
+        // Use the vendored WASM binary instead of fetching it from a CDN.
+        rive.RuntimeLoader.setWasmUrl("motion://app/lib/rive.wasm");
 
-      const layout = new rive.Layout({
-        fit: rive.Fit.FitWidth,
-        alignment: rive.Alignment.Center,
-      });
-
-      const riveCanvas = document.getElementById("rive-canvas");
-      const stateMachineGroup = document.getElementById("state-machine-group");
-      const stateMachineSelect = document.getElementById("state-machine-select");
-
-      // Decode the base64 data
-      const base64Data = "{{BASE64_DATA}}";
-      const binaryString = atob(base64Data);
-      const bytes = new Uint8Array(binaryString.length);
-      for (let i = 0; i < binaryString.length; i++) {
-        bytes[i] = binaryString.charCodeAt(i);
-      }
-
-      let riveInstance;
-      let currentStateMachine;
-
-      function initRive() {
-        riveInstance = new rive.Rive({
-          buffer: bytes.buffer,
-          canvas: riveCanvas,
-          layout,
-          autoplay: true,
-          onLoad: () => {
-            riveInstance.resizeDrawingSurfaceToCanvas();
-            updateStateMachinesList();
-          },
-        });
-      }
-
-      function updateStateMachinesList() {
-        const stateMachines = riveInstance.stateMachineNames;
-        console.log("Available state machines:", stateMachines);
-
-        // Clear existing options
-        stateMachineSelect.innerHTML = "";
-
-        // Only show the selector when the file has state machines
-        stateMachineGroup.style.display = stateMachines.length > 0 ? "flex" : "none";
-
-        // Add new options
-        stateMachines.forEach((stateMachine) => {
-          const option = document.createElement("option");
-          option.value = stateMachine;
-          option.textContent = stateMachine;
-          stateMachineSelect.appendChild(option);
+        const layout = new rive.Layout({
+          fit: rive.Fit.FitWidth,
+          alignment: rive.Alignment.Center,
         });
 
-        // Select the first state machine by default
-        if (stateMachines.length > 0) {
-          currentStateMachine = stateMachines[0];
-          stateMachineSelect.value = currentStateMachine;
+        const riveCanvas = document.getElementById("rive-canvas");
+        const stateMachineGroup = document.getElementById("state-machine-group");
+        const stateMachineSelect = document.getElementById("state-machine-select");
+
+        // The .riv bytes are streamed in by the native scheme handler; nothing is
+        // base64-inlined into this document.
+        const buffer = await (await fetch("motion://app/data")).arrayBuffer();
+
+        let riveInstance;
+        let currentStateMachine;
+
+        function initRive() {
+          riveInstance = new rive.Rive({
+            buffer,
+            canvas: riveCanvas,
+            layout,
+            autoplay: true,
+            onLoad: () => {
+              riveInstance.resizeDrawingSurfaceToCanvas();
+              updateStateMachinesList();
+            },
+          });
+        }
+
+        function updateStateMachinesList() {
+          const stateMachines = riveInstance.stateMachineNames;
+          console.log("Available state machines:", stateMachines);
+
+          // Clear existing options
+          stateMachineSelect.innerHTML = "";
+
+          // Only show the selector when the file has state machines
+          stateMachineGroup.style.display = stateMachines.length > 0 ? "flex" : "none";
+
+          // Add new options
+          stateMachines.forEach((stateMachine) => {
+            const option = document.createElement("option");
+            option.value = stateMachine;
+            option.textContent = stateMachine;
+            stateMachineSelect.appendChild(option);
+          });
+
+          // Select the first state machine by default
+          if (stateMachines.length > 0) {
+            currentStateMachine = stateMachines[0];
+            stateMachineSelect.value = currentStateMachine;
+            updateStateMachine();
+          }
+        }
+
+        function updateStateMachine() {
+          if (riveInstance && riveInstance.stateMachineNames.includes(currentStateMachine)) {
+            riveInstance.stop(riveInstance.stateMachineNames);
+            riveInstance.play(currentStateMachine);
+          } else {
+            console.error("State machine not found:", currentStateMachine);
+          }
+        }
+
+        stateMachineSelect.addEventListener("change", (event) => {
+          currentStateMachine = event.target.value;
           updateStateMachine();
-        }
-      }
+        });
 
-      function updateStateMachine() {
-        if (riveInstance && riveInstance.stateMachineNames.includes(currentStateMachine)) {
-          riveInstance.stop(riveInstance.stateMachineNames);
-          riveInstance.play(currentStateMachine);
-        } else {
-          console.error("State machine not found:", currentStateMachine);
-        }
-      }
-
-      stateMachineSelect.addEventListener("change", (event) => {
-        currentStateMachine = event.target.value;
-        updateStateMachine();
-      });
-
-      initRive();
+        initRive();
+      })();
     </script>
   </body>
 </html>
