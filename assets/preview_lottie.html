@@ -27,11 +27,12 @@
       .controls {
         align-self: center;
         margin-bottom: 18px;
+        box-sizing: border-box;
+        width: min(480px, calc(100% - 48px));
         display: flex;
         align-items: center;
-        justify-content: center;
         gap: 12px;
-        padding: 10px 16px;
+        padding: 10px 14px;
         border-radius: 16px;
         background-color: rgba(255, 255, 255, 0.95);
         -webkit-backdrop-filter: blur(20px) saturate(180%);
@@ -41,13 +42,108 @@
           0 6px 20px rgba(0, 0, 0, 0.18),
           inset 0 1px 0 rgba(255, 255, 255, 0.7);
       }
+      .controls-left {
+        flex: 1;
+        min-width: 0;
+        display: flex;
+        align-items: center;
+        gap: 10px;
+      }
+      .control-group {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+      }
       .control-label {
         font-size: 13px;
         color: #555;
       }
-      .swatches {
+      .icon-button {
+        flex: none;
+        width: 28px;
+        height: 28px;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        padding: 0;
+        border: none;
+        border-radius: 50%;
+        background-color: rgba(0, 0, 0, 0.06);
+        color: #333;
+        cursor: pointer;
+        transition: background-color 0.12s ease;
+      }
+      .icon-button:hover {
+        background-color: rgba(0, 0, 0, 0.12);
+      }
+      .icon-button svg {
+        width: 16px;
+        height: 16px;
+        display: block;
+        fill: currentColor;
+      }
+      .icon-button .icon-play {
+        display: none;
+      }
+      .icon-button.paused .icon-pause {
+        display: none;
+      }
+      .icon-button.paused .icon-play {
+        display: block;
+      }
+      .seeker {
+        -webkit-appearance: none;
+        appearance: none;
+        flex: 1;
+        min-width: 60px;
+        height: 4px;
+        border-radius: 2px;
+        background-color: rgba(0, 0, 0, 0.15);
+        cursor: pointer;
+      }
+      .seeker::-webkit-slider-thumb {
+        -webkit-appearance: none;
+        appearance: none;
+        width: 14px;
+        height: 14px;
+        border-radius: 50%;
+        background-color: #333;
+        border: 2px solid #fff;
+        box-shadow: 0 1px 3px rgba(0, 0, 0, 0.3);
+      }
+      .bg-control {
+        position: relative;
+        flex: none;
+      }
+      .bg-popover {
+        position: absolute;
+        left: 50%;
+        bottom: calc(100% + 10px);
         display: flex;
+        flex-direction: column;
+        align-items: center;
         gap: 10px;
+        padding: 10px;
+        border-radius: 999px;
+        background-color: rgba(255, 255, 255, 0.95);
+        -webkit-backdrop-filter: blur(20px) saturate(180%);
+        backdrop-filter: blur(20px) saturate(180%);
+        border: 1px solid rgba(0, 0, 0, 0.08);
+        box-shadow:
+          0 6px 20px rgba(0, 0, 0, 0.18),
+          inset 0 1px 0 rgba(255, 255, 255, 0.7);
+        opacity: 0;
+        transform: translateX(-50%) translateY(6px) scale(0.96);
+        transform-origin: bottom center;
+        pointer-events: none;
+        transition:
+          opacity 0.14s ease,
+          transform 0.14s ease;
+      }
+      .bg-control.open .bg-popover {
+        opacity: 1;
+        transform: translateX(-50%) translateY(0) scale(1);
+        pointer-events: auto;
       }
       .bg-swatch {
         width: 22px;
@@ -67,12 +163,14 @@
       .bg-swatch.swatch-transparent {
         background-color: #fff;
         background-image:
-          linear-gradient(45deg, #ccc 25%, transparent 25%),
-          linear-gradient(-45deg, #ccc 25%, transparent 25%),
-          linear-gradient(45deg, transparent 75%, #ccc 75%),
-          linear-gradient(-45deg, transparent 75%, #ccc 75%);
+          linear-gradient(45deg, #ccc 25%, transparent 25%), linear-gradient(-45deg, #ccc 25%, transparent 25%),
+          linear-gradient(45deg, transparent 75%, #ccc 75%), linear-gradient(-45deg, transparent 75%, #ccc 75%);
         background-size: 10px 10px;
-        background-position: 0 0, 0 5px, 5px -5px, -5px 0;
+        background-position:
+          0 0,
+          0 5px,
+          5px -5px,
+          -5px 0;
       }
     </style>
   </head>
@@ -81,28 +179,76 @@
       <canvas id="dotlottie-canvas"></canvas>
     </div>
     <div class="controls">
-      <span class="control-label">Background</span>
-      <div class="swatches">
-        <button class="bg-swatch swatch-transparent active" data-color="transparent" title="Transparent"></button>
-        <button class="bg-swatch" style="background: #6666f6" data-color="#6666f6"></button>
-        <button class="bg-swatch" style="background: #6cade2" data-color="#6cade2"></button>
-        <button class="bg-swatch" style="background: #52a6ad" data-color="#52a6ad"></button>
-        <button class="bg-swatch" style="background: #ed7099" data-color="#ed7099"></button>
-        <button class="bg-swatch" style="background: #dfb75d" data-color="#dfb75d"></button>
-        <button class="bg-swatch" style="background: #ce5d52" data-color="#ce5d52"></button>
-        <button class="bg-swatch" style="background: #787faa" data-color="#787faa"></button>
+      <div class="controls-left">
+        <button id="play-toggle" class="icon-button" type="button" aria-label="Pause" title="Pause">
+          <svg class="icon-pause" viewBox="0 0 24 24" aria-hidden="true">
+            <rect x="6" y="5" width="4" height="14" rx="1"></rect>
+            <rect x="14" y="5" width="4" height="14" rx="1"></rect>
+          </svg>
+          <svg class="icon-play" viewBox="0 0 24 24" aria-hidden="true">
+            <path d="M8 5l11 7-11 7z"></path>
+          </svg>
+        </button>
+        <input id="seeker" class="seeker" type="range" min="0" max="100" value="0" step="any" aria-label="Seek" />
+      </div>
+      <div class="bg-control" id="bg-control">
+        <button id="bg-trigger" class="icon-button" type="button" aria-label="Background color" aria-expanded="false">
+          <svg class="fill-icon" viewBox="0 0 24 24" aria-hidden="true">
+            <path
+              d="M16.56 8.94L7.62 0 6.21 1.41l2.38 2.38-5.15 5.15c-.59.59-.59 1.54 0 2.12l5.5 5.5c.29.29.68.44 1.06.44s.77-.15 1.06-.44l5.5-5.5c.59-.58.59-1.53 0-2.12zM5.21 10L10 5.21 14.79 10H5.21zM19 11.5s-2 2.17-2 3.5c0 1.1.9 2 2 2s2-.9 2-2c0-1.33-2-3.5-2-3.5z"
+            ></path>
+            <path class="fill-bar" d="M0 20h24v4H0v-4z" style="fill: rgba(0, 0, 0, 0.18)"></path>
+          </svg>
+        </button>
+        <div class="bg-popover" id="bg-popover">
+          <button class="bg-swatch swatch-transparent active" data-color="transparent" title="Transparent"></button>
+          <button class="bg-swatch" style="background: #6666f6" data-color="#6666f6"></button>
+          <button class="bg-swatch" style="background: #6cade2" data-color="#6cade2"></button>
+          <button class="bg-swatch" style="background: #52a6ad" data-color="#52a6ad"></button>
+          <button class="bg-swatch" style="background: #ed7099" data-color="#ed7099"></button>
+          <button class="bg-swatch" style="background: #dfb75d" data-color="#dfb75d"></button>
+          <button class="bg-swatch" style="background: #ce5d52" data-color="#ce5d52"></button>
+          <button class="bg-swatch" style="background: #787faa" data-color="#787faa"></button>
+        </div>
       </div>
     </div>
 
     <script>
       const stage = document.querySelector(".stage");
-      const swatches = document.querySelectorAll(".bg-swatch");
+      const bgControl = document.getElementById("bg-control");
+      const bgTrigger = document.getElementById("bg-trigger");
+      const swatches = document.querySelectorAll(".bg-popover .bg-swatch");
+
+      // The fill icon's bottom bar reflects the current background color.
+      const fillBar = bgTrigger.querySelector(".fill-bar");
+      const setTriggerColor = (color) => {
+        fillBar.style.fill = color === "transparent" ? "rgba(0, 0, 0, 0.18)" : color;
+      };
+
+      const setOpen = (open) => {
+        bgControl.classList.toggle("open", open);
+        bgTrigger.setAttribute("aria-expanded", String(open));
+      };
+
+      bgTrigger.addEventListener("click", (event) => {
+        event.stopPropagation();
+        setOpen(!bgControl.classList.contains("open"));
+      });
+
       swatches.forEach((swatch) => {
         swatch.addEventListener("click", () => {
-          stage.style.backgroundColor = swatch.dataset.color;
+          const color = swatch.dataset.color;
+          stage.style.backgroundColor = color;
           swatches.forEach((s) => s.classList.remove("active"));
           swatch.classList.add("active");
+          setTriggerColor(color);
+          setOpen(false);
         });
+      });
+
+      // Collapse the popover when clicking anywhere outside the control.
+      document.addEventListener("click", (event) => {
+        if (!bgControl.contains(event.target)) setOpen(false);
       });
     </script>
 
@@ -123,11 +269,69 @@
         // `data` expects a Lottie JSON string, or an ArrayBuffer for .lottie files.
         const data = "{{DATA_TYPE}}" === "json" ? await response.text() : await response.arrayBuffer();
 
-        new DotLottie({
+        const dotLottie = new DotLottie({
           canvas,
           data,
           loop: true,
           autoplay: true,
+        });
+
+        // Transport controls: play/pause toggle plus a frame seeker that
+        // pauses while scrubbing and resumes if it was playing.
+        const playToggle = document.getElementById("play-toggle");
+        const seeker = document.getElementById("seeker");
+        let scrubbing = false;
+        let resumeAfterScrub = false;
+
+        const setPlayingUI = (playing) => {
+          playToggle.classList.toggle("paused", !playing);
+          const label = playing ? "Pause" : "Play";
+          playToggle.setAttribute("aria-label", label);
+          playToggle.title = label;
+        };
+
+        const updateSeekerFill = () => {
+          const max = Number(seeker.max) || 1;
+          const pct = (Number(seeker.value) / max) * 100;
+          seeker.style.background = `linear-gradient(to right, #333 ${pct}%, rgba(0, 0, 0, 0.15) ${pct}%)`;
+        };
+
+        dotLottie.addEventListener("load", () => {
+          seeker.max = dotLottie.totalFrames;
+          updateSeekerFill();
+        });
+
+        dotLottie.addEventListener("frame", ({ currentFrame }) => {
+          if (scrubbing) return;
+          if (dotLottie.totalFrames && Number(seeker.max) !== dotLottie.totalFrames) {
+            seeker.max = dotLottie.totalFrames;
+          }
+          seeker.value = currentFrame;
+          updateSeekerFill();
+        });
+
+        dotLottie.addEventListener("play", () => setPlayingUI(true));
+        dotLottie.addEventListener("pause", () => setPlayingUI(false));
+
+        playToggle.addEventListener("click", () => {
+          if (dotLottie.isPlaying) dotLottie.pause();
+          else dotLottie.play();
+        });
+
+        seeker.addEventListener("pointerdown", () => {
+          resumeAfterScrub = dotLottie.isPlaying;
+          scrubbing = true;
+          dotLottie.pause();
+        });
+        seeker.addEventListener("input", () => {
+          scrubbing = true;
+          dotLottie.setFrame(Number(seeker.value));
+          updateSeekerFill();
+        });
+        seeker.addEventListener("change", () => {
+          scrubbing = false;
+          if (resumeAfterScrub) dotLottie.play();
+          resumeAfterScrub = false;
         });
       })();
     </script>
