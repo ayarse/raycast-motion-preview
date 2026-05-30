@@ -26,14 +26,22 @@
         max-height: 500px;
       }
       .controls {
+        align-self: center;
+        margin-bottom: 18px;
         display: flex;
         align-items: center;
         justify-content: center;
         flex-wrap: wrap;
         gap: 16px;
-        padding: 12px 14px;
-        background-color: #f5f5f7;
-        border-top: 1px solid rgba(0, 0, 0, 0.08);
+        padding: 10px 16px;
+        border-radius: 16px;
+        background-color: rgba(255, 255, 255, 0.95);
+        -webkit-backdrop-filter: blur(20px) saturate(180%);
+        backdrop-filter: blur(20px) saturate(180%);
+        border: 1px solid rgba(0, 0, 0, 0.08);
+        box-shadow:
+          0 6px 20px rgba(0, 0, 0, 0.18),
+          inset 0 1px 0 rgba(255, 255, 255, 0.7);
       }
       .control-group {
         display: flex;
