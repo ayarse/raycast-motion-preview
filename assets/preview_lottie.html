@@ -58,6 +58,17 @@
         font-size: 13px;
         color: #555;
       }
+      #state-machine-group {
+        display: none;
+      }
+      #state-machine-select {
+        max-width: 150px;
+        padding: 4px 6px;
+        font-size: 13px;
+        border: 1px solid rgba(0, 0, 0, 0.15);
+        border-radius: 6px;
+        background-color: #fff;
+      }
       .icon-button {
         flex: none;
         width: 28px;
@@ -190,6 +201,10 @@
           </svg>
         </button>
         <input id="seeker" class="seeker" type="range" min="0" max="100" value="0" step="any" aria-label="Seek" />
+        <div class="control-group" id="state-machine-group">
+          <label class="control-label" for="state-machine-select">State Machine</label>
+          <select id="state-machine-select"></select>
+        </div>
       </div>
       <div class="bg-control" id="bg-control">
         <button id="bg-trigger" class="icon-button" type="button" aria-label="Background color" aria-expanded="false">
@@ -332,6 +347,51 @@
           scrubbing = false;
           if (resumeAfterScrub) dotLottie.play();
           resumeAfterScrub = false;
+        });
+
+        // State machines, if the .lottie defines any. Selecting one hands playback
+        // to it; "Timeline" returns to seekable playback.
+        const stateMachineGroup = document.getElementById("state-machine-group");
+        const stateMachineSelect = document.getElementById("state-machine-select");
+
+        const activateStateMachine = (id) => {
+          if (id) {
+            dotLottie.stateMachineLoad(id);
+            dotLottie.stateMachineStart();
+            seeker.style.display = "none";
+          } else {
+            dotLottie.stateMachineStop();
+            seeker.style.display = "";
+            dotLottie.play();
+          }
+        };
+
+        dotLottie.addEventListener("load", () => {
+          const machines = dotLottie.manifest?.stateMachines ?? [];
+          stateMachineGroup.style.display = machines.length ? "flex" : "none";
+          if (!machines.length) return;
+
+          stateMachineSelect.innerHTML = "";
+          const timelineOption = document.createElement("option");
+          timelineOption.value = "";
+          timelineOption.textContent = "Timeline";
+          stateMachineSelect.appendChild(timelineOption);
+          machines.forEach(({ id, name }) => {
+            const option = document.createElement("option");
+            option.value = id;
+            option.textContent = name || id;
+            stateMachineSelect.appendChild(option);
+          });
+
+          // A lone state machine is the default instead of the timeline.
+          if (machines.length === 1) {
+            stateMachineSelect.value = machines[0].id;
+            activateStateMachine(machines[0].id);
+          }
+        });
+
+        stateMachineSelect.addEventListener("change", (event) => {
+          activateStateMachine(event.target.value);
         });
       })();
     </script>
