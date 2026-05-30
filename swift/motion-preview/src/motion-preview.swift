@@ -1,11 +1,10 @@
 import Cocoa
 import RaycastSwiftMacros
-import SwiftUI
 import WebKit
 
 // MARK: - Model
 
-// A motion file format the previewer can render, along with the template, data marker, and MIME type it needs.
+// A motion file format the previewer can render, along with the data marker and MIME type it needs.
 private enum MotionFileType {
     case rive
     case lottieJSON
@@ -20,13 +19,7 @@ private enum MotionFileType {
         }
     }
 
-    var templateName: String {
-        switch self {
-        case .rive: "preview_rive.html"
-        case .lottieJSON, .dotLottie: "preview_lottie.html"
-        }
-    }
-
+    // The marker the page reads to pick a renderer and how to fetch the payload.
     var dataType: String {
         switch self {
         case .rive: "arraybuffer"
@@ -43,10 +36,26 @@ private enum MotionFileType {
     }
 }
 
-// An immutable, ready-to-render preview payload.
-private struct PreviewDocument {
-    let data: Data
-    let type: MotionFileType
+// The folder's previewable files plus which one is selected. The page reads this as a manifest and fetches each file's
+// bytes by index; arrow keys and thumbnail clicks just move `current` on the page, never reloading the window.
+private final class PreviewLibrary {
+    private(set) var files: [URL]
+    private(set) var current: Int
+
+    init(selected: URL) {
+        files = [selected]
+        current = 0
+    }
+
+    // Replaces the single selected file with the full folder scan once it finishes (always on the main thread).
+    func setFiles(_ files: [URL], current: Int) {
+        self.files = files
+        self.current = current
+    }
+
+    func url(at index: Int) -> URL? {
+        files.indices.contains(index) ? files[index] : nil
+    }
 }
 
 // MARK: - Errors
@@ -123,9 +132,26 @@ private enum LottieValidator {
     }
 }
 
+// MARK: - Folder scan
+
+// Lists the previewable files in a folder, name-sorted the way Finder shows them (numeric-aware), for the carousel.
+private enum FolderScanner {
+    static func supportedFiles(in folder: URL) -> [URL] {
+        let contents = (try? FileManager.default.contentsOfDirectory(
+            at: folder,
+            includingPropertiesForKeys: nil,
+            options: [.skipsHiddenFiles]
+        )) ?? []
+
+        return contents
+            .filter { MotionFileType(fileExtension: $0.pathExtension) != nil }
+            .sorted { $0.lastPathComponent.localizedStandardCompare($1.lastPathComponent) == .orderedAscending }
+    }
+}
+
 // MARK: - Bundle layout
 
-// Locates the assets directory (HTML templates and the vendored `lib/` runtime), two levels above the executable.
+// Locates the assets directory (HTML template and the vendored `lib/` runtime), two levels above the executable.
 private enum BundleLayout {
     static func assetsDirectory() throws -> URL {
         guard let executablePath = Bundle.main.executablePath else {
@@ -139,21 +165,22 @@ private enum BundleLayout {
 
 // MARK: - HTML rendering
 
-// Fills the bundled template with the document's data-type marker; the payload is fetched separately via the scheme handler.
+// Loads the single bundled template, which renders all three formats and drives the carousel from the manifest.
 private enum HTMLRenderer {
-    static func render(_ document: PreviewDocument) -> Result<String, PreviewError> {
+    static let templateName = "preview.html"
+
+    static func render() -> Result<String, PreviewError> {
         do {
-            let template = try String(contentsOf: templateURL(for: document.type), encoding: .utf8)
-            let html = template.replacingOccurrences(of: "{{DATA_TYPE}}", with: document.type.dataType)
-            return .success(html)
+            let url = try BundleLayout.assetsDirectory().appendingPathComponent(templateName)
+            return .success(try String(contentsOf: url, encoding: .utf8))
         } catch let error as PreviewError {
             return .failure(error)
         } catch {
-            return .failure(.missingTemplate(document.type.templateName))
+            return .failure(.missingTemplate(templateName))
         }
     }
 
-    // A standalone page shown when a template can't load, so a render failure surfaces in the window instead of crashing.
+    // A standalone page shown when the template can't load, so a render failure surfaces in the window instead of crashing.
     static func errorPage(_ error: PreviewError) -> String {
         let message = (error.errorDescription ?? "Unable to render preview.")
             .replacingOccurrences(of: "<", with: "&lt;")
@@ -168,25 +195,22 @@ private enum HTMLRenderer {
         </html>
         """
     }
-
-    private static func templateURL(for type: MotionFileType) throws -> URL {
-        try BundleLayout.assetsDirectory().appendingPathComponent(type.templateName)
-    }
 }
 
 // MARK: - Custom scheme handler
 
-// Serves the page, the vendored runtime, and the raw animation bytes from one in-process origin (motion://app/), giving
-// the page a real origin so it can fetch its payload and load the renderer locally — fully offline, with no base64 inlining.
+// Serves the page, the folder manifest, each file's bytes (/data/<index>), and the vendored runtime from one in-process
+// origin (motion://app/), giving the page a real origin so it can fetch payloads and load the renderer locally — fully
+// offline, with no base64 inlining.
 private final class PreviewSchemeHandler: NSObject, WKURLSchemeHandler {
     static let scheme = "motion"
     static let baseURL = URL(string: "\(scheme)://app/index.html")
 
-    private let document: PreviewDocument
+    private let library: PreviewLibrary
     private let assetsDirectory: URL
 
-    init(document: PreviewDocument, assetsDirectory: URL) {
-        self.document = document
+    init(library: PreviewLibrary, assetsDirectory: URL) {
+        self.library = library
         self.assetsDirectory = assetsDirectory
     }
 
@@ -218,22 +242,29 @@ private final class PreviewSchemeHandler: NSObject, WKURLSchemeHandler {
 
     func webView(_ webView: WKWebView, stop task: WKURLSchemeTask) {}
 
-    // Maps a motion://app/<path> request to bytes: the rendered page, the animation payload (/data), or a vendored
-    // `lib/` asset — rejecting any path that tries to traverse out of the assets directory.
+    // Maps a motion://app/<path> request to bytes: the rendered page, the folder manifest, a file's payload (/data or
+    // /data/<index>), or a vendored `lib/` asset — rejecting any path that tries to traverse out of the assets directory.
     private func payload(for url: URL) -> (data: Data, mimeType: String)? {
         switch url.path {
         case "", "/", "/index.html":
             let html: String
-            switch HTMLRenderer.render(document) {
+            switch HTMLRenderer.render() {
             case .success(let rendered): html = rendered
             case .failure(let error): html = HTMLRenderer.errorPage(error)
             }
             return (Data(html.utf8), "text/html; charset=utf-8")
 
+        case "/manifest":
+            return (manifestData(), "application/json")
+
         case "/data":
-            return (document.data, document.type.dataMimeType)
+            return filePayload(at: library.current)
 
         default:
+            if url.path.hasPrefix("/data/"), let index = Int(url.path.dropFirst("/data/".count)) {
+                return filePayload(at: index)
+            }
+
             let relativePath = String(url.path.drop(while: { $0 == "/" }))
             guard relativePath.hasPrefix("lib/"), !relativePath.contains("..") else { return nil }
 
@@ -241,6 +272,26 @@ private final class PreviewSchemeHandler: NSObject, WKURLSchemeHandler {
             guard let data = try? Data(contentsOf: fileURL) else { return nil }
             return (data, Self.mimeType(forPathExtension: fileURL.pathExtension))
         }
+    }
+
+    // The carousel manifest: the selected index and, per file, its position, display name, and renderer marker.
+    private func manifestData() -> Data {
+        let items = library.files.enumerated().map { index, url -> [String: Any] in
+            [
+                "index": index,
+                "name": url.lastPathComponent,
+                "type": MotionFileType(fileExtension: url.pathExtension)?.dataType ?? "json",
+            ]
+        }
+        let payload: [String: Any] = ["current": library.current, "items": items]
+        return (try? JSONSerialization.data(withJSONObject: payload)) ?? Data(#"{"current":0,"items":[]}"#.utf8)
+    }
+
+    private func filePayload(at index: Int) -> (data: Data, mimeType: String)? {
+        guard let fileURL = library.url(at: index),
+              let type = MotionFileType(fileExtension: fileURL.pathExtension),
+              let data = try? Data(contentsOf: fileURL) else { return nil }
+        return (data, type.dataMimeType)
     }
 
     private static func mimeType(forPathExtension ext: String) -> String {
@@ -253,86 +304,31 @@ private final class PreviewSchemeHandler: NSObject, WKURLSchemeHandler {
     }
 }
 
-// MARK: - Views
-
-// Hosts a transparent WKWebView that loads the preview page from the custom scheme, so the page's stage color (or none) shows through to the window; falls back to the error page if assets are missing.
-private struct MotionWebView: NSViewRepresentable {
-    let document: PreviewDocument
-
-    func makeNSView(context: Context) -> WKWebView {
-        let configuration = WKWebViewConfiguration()
-
-        guard let assetsDirectory = try? BundleLayout.assetsDirectory() else {
-            let webView = WKWebView(frame: .zero, configuration: configuration)
-            let error = PreviewError.missingTemplate(document.type.templateName)
-            webView.loadHTMLString(HTMLRenderer.errorPage(error), baseURL: nil)
-            return webView
-        }
-
-        let handler = PreviewSchemeHandler(document: document, assetsDirectory: assetsDirectory)
-        configuration.setURLSchemeHandler(handler, forURLScheme: PreviewSchemeHandler.scheme)
-
-        let webView = WKWebView(frame: .zero, configuration: configuration)
-        webView.setValue(false, forKey: "drawsBackground")
-        if let baseURL = PreviewSchemeHandler.baseURL {
-            webView.load(URLRequest(url: baseURL))
-        }
-        return webView
-    }
-
-    func updateNSView(_ nsView: WKWebView, context: Context) {}
-}
-
-// The framed animation card centered over a dimmed, click-to-dismiss backdrop.
-private struct ContentView: View {
-    let document: PreviewDocument
-    let onClose: () -> Void
-
-    @State private var visible = false
-
-    var body: some View {
-        ZStack {
-            Color.black.opacity(0.5)
-                .ignoresSafeArea()
-                .opacity(visible ? 1 : 0)
-                .onTapGesture(perform: onClose)
-
-            MotionWebView(document: document)
-                .frame(width: 550, height: 550)
-                .cornerRadius(20)
-                .shadow(radius: 10)
-        }
-        .ignoresSafeArea()
-        .onAppear {
-            withAnimation(.easeOut(duration: 0.2)) {
-                visible = true
-            }
-        }
-    }
-}
-
 // MARK: - Window & app lifecycle
 
-// A borderless floating panel that can still become key, so it receives the Escape key.
+// A borderless floating panel that can still become key, so it receives the Escape and arrow keys.
 private final class PreviewWindow: NSPanel {
     override var canBecomeKey: Bool { true }
     override var canBecomeMain: Bool { true }
 }
 
-// Builds and shows the floating preview window, and tears the app down on close or Escape (key code 53).
-private final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
-    private let document: PreviewDocument
+// Builds and shows the floating preview window, scans the selected file's folder for siblings to populate the carousel,
+// and tears the app down on close, a backdrop click, or Escape (key code 53).
+private final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, WKScriptMessageHandler {
+    private let selectedURL: URL
+    private let library: PreviewLibrary
     private var window: PreviewWindow?
-    private var escapeMonitor: Any?
+    private var webView: WKWebView?
+    private var keyMonitor: Any?
 
-    init(document: PreviewDocument) {
-        self.document = document
+    init(selectedURL: URL) {
+        self.selectedURL = selectedURL
+        self.library = PreviewLibrary(selected: selectedURL)
     }
 
     func applicationDidFinishLaunching(_ notification: Notification) {
-        let contentView = ContentView(document: document) { [weak self] in
-            self?.terminate()
-        }
+        let webView = makeWebView()
+        self.webView = webView
 
         let frame = NSScreen.main?.frame ?? NSRect(x: 0, y: 0, width: 800, height: 600)
         let window = PreviewWindow(
@@ -345,17 +341,35 @@ private final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelega
         window.backgroundColor = .clear
         window.isOpaque = false
         window.hasShadow = false
-        window.contentView = NSHostingView(rootView: contentView)
+        // The page paints the full-screen dim backdrop, the centered card, and the bottom carousel; the web view is
+        // transparent so the backdrop composites over the desktop.
+        webView.frame = frame
+        webView.autoresizingMask = [.width, .height]
+        window.contentView = webView
         window.delegate = self
         self.window = window
 
         window.makeKeyAndOrderFront(nil)
         NSApp.activate(ignoringOtherApps: true)
 
-        escapeMonitor = NSEvent.addLocalMonitorForEvents(matching: [.keyDown]) { [weak self] event in
-            guard event.keyCode == 53 else { return event }
-            self?.terminate()
-            return nil
+        scanFolder()
+
+        // Escape (53) closes; the arrow keys (Left 123, Right 124, Down 125, Up 126) step the carousel inside the page.
+        keyMonitor = NSEvent.addLocalMonitorForEvents(matching: [.keyDown]) { [weak self] event in
+            guard let self else { return event }
+            switch event.keyCode {
+            case 53:
+                self.terminate()
+                return nil
+            case 123, 126:
+                self.navigate(by: -1)
+                return nil
+            case 124, 125:
+                self.navigate(by: 1)
+                return nil
+            default:
+                return event
+            }
         }
     }
 
@@ -367,10 +381,64 @@ private final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelega
         terminate()
     }
 
+    private func makeWebView() -> WKWebView {
+        let configuration = WKWebViewConfiguration()
+        // The page posts here when the dim backdrop is clicked, so click-outside-to-dismiss still works.
+        configuration.userContentController.add(self, name: "close")
+
+        guard let assetsDirectory = try? BundleLayout.assetsDirectory() else {
+            let webView = WKWebView(frame: .zero, configuration: configuration)
+            webView.setValue(false, forKey: "drawsBackground")
+            webView.loadHTMLString(HTMLRenderer.errorPage(.missingTemplate(HTMLRenderer.templateName)), baseURL: nil)
+            return webView
+        }
+
+        let handler = PreviewSchemeHandler(library: library, assetsDirectory: assetsDirectory)
+        configuration.setURLSchemeHandler(handler, forURLScheme: PreviewSchemeHandler.scheme)
+
+        let webView = WKWebView(frame: .zero, configuration: configuration)
+        webView.setValue(false, forKey: "drawsBackground")
+        if let baseURL = PreviewSchemeHandler.baseURL {
+            webView.load(URLRequest(url: baseURL))
+        }
+        return webView
+    }
+
+    // The page's only message is a request to dismiss (a click on the dim backdrop).
+    func userContentController(_ controller: WKUserContentController, didReceive message: WKScriptMessage) {
+        terminate()
+    }
+
+    // Scans the folder off the main thread, then (only when there are siblings) hands the full list to the page so the
+    // carousel appears a beat after the stage — no blocking on slow or networked folders.
+    private func scanFolder() {
+        let folder = selectedURL.deletingLastPathComponent()
+        let selected = selectedURL
+        DispatchQueue.global(qos: .userInitiated).async { [weak self] in
+            var files = FolderScanner.supportedFiles(in: folder)
+            if !files.contains(where: { $0.lastPathComponent == selected.lastPathComponent }) {
+                files.insert(selected, at: 0)
+            }
+            let current = files.firstIndex { $0.lastPathComponent == selected.lastPathComponent } ?? 0
+            guard files.count > 1 else { return }
+
+            DispatchQueue.main.async {
+                guard let self else { return }
+                self.library.setFiles(files, current: current)
+                self.webView?.evaluateJavaScript("window.__motionRefresh && window.__motionRefresh()")
+            }
+        }
+    }
+
+    // Steps the carousel in the page; it owns the current index and clamps at the ends.
+    private func navigate(by delta: Int) {
+        webView?.evaluateJavaScript("window.__motionNav && window.__motionNav(\(delta))")
+    }
+
     private func terminate() {
-        if let escapeMonitor {
-            NSEvent.removeMonitor(escapeMonitor)
-            self.escapeMonitor = nil
+        if let keyMonitor {
+            NSEvent.removeMonitor(keyMonitor)
+            self.keyMonitor = nil
         }
         NSApplication.shared.terminate(nil)
     }
@@ -389,7 +457,8 @@ private final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelega
         throw PreviewError.unsupportedType(fileExtension)
     }
 
-    guard let data = try? Data(contentsOf: URL(fileURLWithPath: filePath)) else {
+    let url = URL(fileURLWithPath: filePath)
+    guard let data = try? Data(contentsOf: url) else {
         throw PreviewError.unreadableFile(filePath)
     }
 
@@ -397,7 +466,7 @@ private final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelega
         try LottieValidator.validate(data)
     }
 
-    let delegate = AppDelegate(document: PreviewDocument(data: data, type: fileType))
+    let delegate = AppDelegate(selectedURL: url)
 
     let app = NSApplication.shared
     app.delegate = delegate
