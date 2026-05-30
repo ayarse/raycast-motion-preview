@@ -19,7 +19,7 @@
         align-items: center;
         background-color: transparent;
       }
-      #rive-canvas {
+      #preview-canvas {
         width: 100%;
         height: 100%;
         max-width: 500px;
@@ -59,6 +59,17 @@
         font-size: 13px;
         color: #555;
       }
+      #state-machine-group {
+        display: none;
+      }
+      #state-machine-select {
+        max-width: 150px;
+        padding: 4px 6px;
+        font-size: 13px;
+        border: 1px solid rgba(0, 0, 0, 0.15);
+        border-radius: 6px;
+        background-color: #fff;
+      }
       .icon-button {
         flex: none;
         width: 28px;
@@ -92,16 +103,25 @@
       .icon-button.paused .icon-play {
         display: block;
       }
-      #state-machine-group {
-        display: none;
+      .seeker {
+        -webkit-appearance: none;
+        appearance: none;
+        flex: 1;
+        min-width: 60px;
+        height: 4px;
+        border-radius: 2px;
+        background-color: rgba(0, 0, 0, 0.15);
+        cursor: pointer;
       }
-      #state-machine-select {
-        max-width: 150px;
-        padding: 4px 6px;
-        font-size: 13px;
-        border: 1px solid rgba(0, 0, 0, 0.15);
-        border-radius: 6px;
-        background-color: #fff;
+      .seeker::-webkit-slider-thumb {
+        -webkit-appearance: none;
+        appearance: none;
+        width: 14px;
+        height: 14px;
+        border-radius: 50%;
+        background-color: #333;
+        border: 2px solid #fff;
+        box-shadow: 0 1px 3px rgba(0, 0, 0, 0.3);
       }
       .bg-control {
         position: relative;
@@ -169,7 +189,7 @@
 
   <body>
     <div class="stage">
-      <canvas id="rive-canvas"></canvas>
+      <canvas id="preview-canvas"></canvas>
     </div>
     <div class="controls">
       <div class="controls-left">
@@ -182,6 +202,7 @@
             <path d="M8 5l11 7-11 7z"></path>
           </svg>
         </button>
+        <input id="seeker" class="seeker" type="range" min="0" max="100" value="0" step="any" aria-label="Seek" />
         <div class="control-group" id="state-machine-group">
           <label class="control-label" for="state-machine-select">State Machine</label>
           <select id="state-machine-select"></select>
@@ -248,27 +269,22 @@
       });
     </script>
 
-    <!-- Rive renderer, vendored locally under assets/lib and served by the native
-         motion:// scheme handler, so it loads instantly and offline with no CDN
-         round-trip. The UMD build exposes a global `rive`. -->
-    <script src="motion://app/lib/rive.js"></script>
     <script>
+      // One template renders all three formats. The native scheme handler fills in
+      // the data-type marker, which selects the renderer: `arraybuffer` -> Rive,
+      // anything else -> dotLottie (`json` for plain Lottie, `lottie` for a bundle).
+      // The matching renderer is vendored under assets/lib and served by the
+      // motion:// scheme handler, so it loads instantly and offline with no CDN.
       (async () => {
-        // Use the vendored WASM binary instead of fetching it from a CDN.
-        rive.RuntimeLoader.setWasmUrl("motion://app/lib/rive.wasm");
+        const DATA_TYPE = "{{DATA_TYPE}}";
+        const isRive = DATA_TYPE === "arraybuffer";
 
-        const layout = new rive.Layout({
-          fit: rive.Fit.FitWidth,
-          alignment: rive.Alignment.Center,
-        });
-
-        const riveCanvas = document.getElementById("rive-canvas");
+        const canvas = document.getElementById("preview-canvas");
+        const playToggle = document.getElementById("play-toggle");
+        const seeker = document.getElementById("seeker");
         const stateMachineGroup = document.getElementById("state-machine-group");
         const stateMachineSelect = document.getElementById("state-machine-select");
-        const playToggle = document.getElementById("play-toggle");
 
-        // Reflect the runtime's playback state on the play/pause button. Rive
-        // has no linear timeline for state machines, so there is no seeker.
         const setPlayingUI = (playing) => {
           playToggle.classList.toggle("paused", !playing);
           const label = playing ? "Pause" : "Play";
@@ -276,28 +292,44 @@
           playToggle.title = label;
         };
 
-        playToggle.addEventListener("click", () => {
-          if (!riveInstance) return;
-          if (riveInstance.isPlaying) riveInstance.pause();
-          else riveInstance.play();
-        });
+        const loadScript = (src) =>
+          new Promise((resolve, reject) => {
+            const script = document.createElement("script");
+            script.src = src;
+            script.onload = resolve;
+            script.onerror = reject;
+            document.head.appendChild(script);
+          });
 
-        // The .riv bytes are streamed in by the native scheme handler; nothing is
-        // base64-inlined into this document.
-        const buffer = await (await fetch("motion://app/data")).arrayBuffer();
+        if (isRive) {
+          await loadScript("motion://app/lib/rive.js");
+          await initRive();
+        } else {
+          await loadScript("motion://app/lib/dotlottie.js");
+          await initLottie();
+        }
 
-        let riveInstance;
-        let currentStateMachine;
+        // Rive (.riv). State machines have no linear timeline, so the seeker is
+        // hidden; the selector always drives a machine and defaults to the first.
+        async function initRive() {
+          rive.RuntimeLoader.setWasmUrl("motion://app/lib/rive.wasm");
+          seeker.style.display = "none";
 
-        function initRive() {
-          riveInstance = new rive.Rive({
+          const layout = new rive.Layout({
+            fit: rive.Fit.FitWidth,
+            alignment: rive.Alignment.Center,
+          });
+          const buffer = await (await fetch("motion://app/data")).arrayBuffer();
+
+          let currentStateMachine;
+          const riveInstance = new rive.Rive({
             buffer,
-            canvas: riveCanvas,
+            canvas,
             layout,
             autoplay: true,
             onLoad: () => {
               riveInstance.resizeDrawingSurfaceToCanvas();
-              updateStateMachinesList();
+              updateStateMachines();
             },
           });
 
@@ -306,49 +338,147 @@
             riveInstance.on(rive.EventType.Pause, () => setPlayingUI(false));
             riveInstance.on(rive.EventType.Stop, () => setPlayingUI(false));
           }
-        }
 
-        function updateStateMachinesList() {
-          const stateMachines = riveInstance.stateMachineNames;
-          console.log("Available state machines:", stateMachines);
-
-          // Clear existing options
-          stateMachineSelect.innerHTML = "";
-
-          // Only show the selector when the file has state machines
-          stateMachineGroup.style.display = stateMachines.length > 0 ? "flex" : "none";
-
-          // Add new options
-          stateMachines.forEach((stateMachine) => {
-            const option = document.createElement("option");
-            option.value = stateMachine;
-            option.textContent = stateMachine;
-            stateMachineSelect.appendChild(option);
+          playToggle.addEventListener("click", () => {
+            if (riveInstance.isPlaying) riveInstance.pause();
+            else riveInstance.play();
           });
 
-          // Select the first state machine by default
-          if (stateMachines.length > 0) {
-            currentStateMachine = stateMachines[0];
-            stateMachineSelect.value = currentStateMachine;
-            updateStateMachine();
-          }
-        }
-
-        function updateStateMachine() {
-          if (riveInstance && riveInstance.stateMachineNames.includes(currentStateMachine)) {
+          const activateStateMachine = () => {
             riveInstance.stop(riveInstance.stateMachineNames);
             riveInstance.play(currentStateMachine);
-          } else {
-            console.error("State machine not found:", currentStateMachine);
+          };
+
+          function updateStateMachines() {
+            const machines = riveInstance.stateMachineNames;
+            stateMachineGroup.style.display = machines.length ? "flex" : "none";
+            if (!machines.length) return;
+
+            stateMachineSelect.innerHTML = "";
+            machines.forEach((name) => {
+              const option = document.createElement("option");
+              option.value = name;
+              option.textContent = name;
+              stateMachineSelect.appendChild(option);
+            });
+
+            currentStateMachine = machines[0];
+            stateMachineSelect.value = currentStateMachine;
+            activateStateMachine();
           }
+
+          stateMachineSelect.addEventListener("change", (event) => {
+            currentStateMachine = event.target.value;
+            activateStateMachine();
+          });
         }
 
-        stateMachineSelect.addEventListener("change", (event) => {
-          currentStateMachine = event.target.value;
-          updateStateMachine();
-        });
+        // Lottie (.json) and dotLottie (.lottie), via a frame seeker.
+        async function initLottie() {
+          DotLottie.setWasmUrl("motion://app/lib/dotlottie-player.wasm");
 
-        initRive();
+          const response = await fetch("motion://app/data");
+          // `data` expects a Lottie JSON string, or an ArrayBuffer for .lottie files.
+          const data = DATA_TYPE === "json" ? await response.text() : await response.arrayBuffer();
+
+          const dotLottie = new DotLottie({
+            canvas,
+            data,
+            loop: true,
+            autoplay: true,
+          });
+
+          // Transport controls: play/pause toggle plus a frame seeker that
+          // pauses while scrubbing and resumes if it was playing.
+          let scrubbing = false;
+          let resumeAfterScrub = false;
+
+          const updateSeekerFill = () => {
+            const max = Number(seeker.max) || 1;
+            const pct = (Number(seeker.value) / max) * 100;
+            seeker.style.background = `linear-gradient(to right, #333 ${pct}%, rgba(0, 0, 0, 0.15) ${pct}%)`;
+          };
+
+          dotLottie.addEventListener("load", () => {
+            seeker.max = dotLottie.totalFrames;
+            updateSeekerFill();
+          });
+
+          dotLottie.addEventListener("frame", ({ currentFrame }) => {
+            if (scrubbing) return;
+            if (dotLottie.totalFrames && Number(seeker.max) !== dotLottie.totalFrames) {
+              seeker.max = dotLottie.totalFrames;
+            }
+            seeker.value = currentFrame;
+            updateSeekerFill();
+          });
+
+          dotLottie.addEventListener("play", () => setPlayingUI(true));
+          dotLottie.addEventListener("pause", () => setPlayingUI(false));
+
+          playToggle.addEventListener("click", () => {
+            if (dotLottie.isPlaying) dotLottie.pause();
+            else dotLottie.play();
+          });
+
+          seeker.addEventListener("pointerdown", () => {
+            resumeAfterScrub = dotLottie.isPlaying;
+            scrubbing = true;
+            dotLottie.pause();
+          });
+          seeker.addEventListener("input", () => {
+            scrubbing = true;
+            dotLottie.setFrame(Number(seeker.value));
+            updateSeekerFill();
+          });
+          seeker.addEventListener("change", () => {
+            scrubbing = false;
+            if (resumeAfterScrub) dotLottie.play();
+            resumeAfterScrub = false;
+          });
+
+          // State machines, if the .lottie defines any. Selecting one hands playback
+          // to it; "Timeline" returns to seekable playback.
+          const activateStateMachine = (id) => {
+            if (id) {
+              dotLottie.stateMachineLoad(id);
+              dotLottie.stateMachineStart();
+              seeker.style.display = "none";
+            } else {
+              dotLottie.stateMachineStop();
+              seeker.style.display = "";
+              dotLottie.play();
+            }
+          };
+
+          dotLottie.addEventListener("load", () => {
+            const machines = dotLottie.manifest?.stateMachines ?? [];
+            stateMachineGroup.style.display = machines.length ? "flex" : "none";
+            if (!machines.length) return;
+
+            stateMachineSelect.innerHTML = "";
+            const timelineOption = document.createElement("option");
+            timelineOption.value = "";
+            timelineOption.textContent = "Timeline";
+            stateMachineSelect.appendChild(timelineOption);
+            machines.forEach(({ id, name }) => {
+              const option = document.createElement("option");
+              option.value = id;
+              option.textContent = name || id;
+              stateMachineSelect.appendChild(option);
+            });
+
+            // A lone state machine is the default instead of the timeline.
+            if (machines.length === 1) {
+              stateMachineSelect.value = machines[0].id;
+              activateStateMachine(machines[0].id);
+            }
+          });
+
+          stateMachineSelect.addEventListener("change", (event) => {
+            activateStateMachine(event.target.value);
+          });
+        }
       })();
     </script>
   </body>
