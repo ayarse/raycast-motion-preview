@@ -288,10 +288,13 @@ private struct ContentView: View {
     let document: PreviewDocument
     let onClose: () -> Void
 
+    @State private var visible = false
+
     var body: some View {
         ZStack {
             Color.black.opacity(0.5)
                 .ignoresSafeArea()
+                .opacity(visible ? 1 : 0)
                 .onTapGesture(perform: onClose)
 
             MotionWebView(document: document)
@@ -300,6 +303,11 @@ private struct ContentView: View {
                 .shadow(radius: 10)
         }
         .ignoresSafeArea()
+        .onAppear {
+            withAnimation(.easeOut(duration: 0.2)) {
+                visible = true
+            }
+        }
     }
 }
 
