@@ -7,8 +7,7 @@ const execFileAsync = promisify(execFile);
 
 const SUPPORTED_FILE = /\.(lottie|json|riv)$/i;
 
-// AppleScript that returns the POSIX path of the first Finder selection
-// (empty string when nothing is selected or Finder isn't running).
+// Returns the POSIX path of the first Finder selection, or "" when nothing is selected or Finder isn't running.
 const FINDER_SELECTION_SCRIPT = `
 if application "Finder" is not running then
     return ""
@@ -21,24 +20,18 @@ tell application "Finder"
 end tell
 `;
 
-/**
- * Gets the first selected Finder item via osascript.
- *
- * We use AppleScript here rather than Raycast's getSelectedFinderItems(): in
- * practice it returns the selection noticeably faster, which shaves the delay
- * before the preview window appears.
- */
+// Reads the first selected Finder item via osascript — measurably faster here than Raycast's getSelectedFinderItems().
 const getFinderSelection = async (): Promise<string | undefined> => {
   try {
     const { stdout } = await execFileAsync("osascript", ["-e", FINDER_SELECTION_SCRIPT]);
     const path = stdout.trim();
     return path ? path : undefined;
   } catch {
-    // Finder unavailable / Apple Events denied; the caller surfaces this.
     return undefined;
   }
 };
 
+// Validates the Finder selection, then hands it to the Swift previewer (which reads and validates the file itself).
 const PreviewAnimation = async () => {
   const file = await getFinderSelection();
 
@@ -53,15 +46,13 @@ const PreviewAnimation = async () => {
   }
 
   try {
-    // The Swift previewer reads and validates the file before opening its
-    // window, so invalid files are rejected here instead of loading.
     await previewFile(file);
   } catch (error) {
     await showHUD(swiftErrorMessage(error) ?? "Could not preview animation");
   }
 };
 
-/** Extracts a readable message from a Swift-bridge error (stderr or message). */
+// Extracts a readable message from a Swift-bridge error (its stderr or message).
 const swiftErrorMessage = (error: unknown): string | undefined => {
   if (!error || typeof error !== "object") return undefined;
   const { stderr, message } = error as { stderr?: unknown; message?: unknown };

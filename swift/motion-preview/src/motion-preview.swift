@@ -5,7 +5,7 @@ import WebKit
 
 // MARK: - Model
 
-/// A motion file format the previewer knows how to render.
+// A motion file format the previewer can render, along with the template, data marker, and MIME type it needs.
 private enum MotionFileType {
     case rive
     case lottieJSON
@@ -20,7 +20,6 @@ private enum MotionFileType {
         }
     }
 
-    /// HTML template bundled alongside the executable.
     var templateName: String {
         switch self {
         case .rive: "preview_rive.html"
@@ -28,7 +27,6 @@ private enum MotionFileType {
         }
     }
 
-    /// Value substituted for the template's `{{DATA_TYPE}}` placeholder.
     var dataType: String {
         switch self {
         case .rive: "arraybuffer"
@@ -37,7 +35,6 @@ private enum MotionFileType {
         }
     }
 
-    /// MIME type used when the scheme handler serves the raw payload to the page.
     var dataMimeType: String {
         switch self {
         case .lottieJSON: "application/json"
@@ -46,7 +43,7 @@ private enum MotionFileType {
     }
 }
 
-/// An immutable, ready-to-render preview payload.
+// An immutable, ready-to-render preview payload.
 private struct PreviewDocument {
     let data: Data
     let type: MotionFileType
@@ -54,6 +51,7 @@ private struct PreviewDocument {
 
 // MARK: - Errors
 
+// Failures surfaced to the user; `description` keeps the Raycast bridge's stderr output human-readable.
 private enum PreviewError: LocalizedError, CustomStringConvertible {
     case emptyPath
     case unsupportedType(String)
@@ -76,38 +74,32 @@ private enum PreviewError: LocalizedError, CustomStringConvertible {
         }
     }
 
-    // When the entry point rethrows, the Raycast bridge prints the error to
-    // stderr; this keeps that output human-readable instead of the raw enum case.
     var description: String { errorDescription ?? "Unable to preview the file." }
 }
 
 // MARK: - Lottie validation
 
+// Validates a Lottie document's required top-level fields up front, so a bad file surfaces as a message rather than a blank window.
 private enum LottieValidator {
-    /// A Lottie animation must be a JSON object carrying these correctly-typed
-    /// top-level properties. Validating here means the file is read once (the
-    /// previewer already loaded its bytes) instead of being re-read and
-    /// re-parsed by a separate JavaScript pre-flight.
     static func validate(_ data: Data) throws {
         guard let object = try? JSONSerialization.jsonObject(with: data) as? [String: Any] else {
             throw PreviewError.invalidLottie("not a JSON object")
         }
 
-        // `v`: version string beginning with a digit.
         guard let version = object["v"] as? String, version.first?.isNumber == true else {
             throw PreviewError.invalidLottie(#"missing or invalid "v""#)
         }
 
-        try requirePositive(object, "fr") // frame rate > 0
-        try requireNonNegative(object, "ip") // in point >= 0
-        try requireNonNegative(object, "op") // out point >= 0
-        try requirePositiveInteger(object, "w") // width
-        try requirePositiveInteger(object, "h") // height
+        try requirePositive(object, "fr")
+        try requireNonNegative(object, "ip")
+        try requireNonNegative(object, "op")
+        try requirePositiveInteger(object, "w")
+        try requirePositiveInteger(object, "h")
     }
 
+    // Reads a numeric field, rejecting JSON booleans (which also bridge to NSNumber).
     private static func number(_ object: [String: Any], _ key: String) -> Double? {
         guard let value = object[key] as? NSNumber else { return nil }
-        // Reject JSON booleans, which also bridge to NSNumber.
         if CFGetTypeID(value) == CFBooleanGetTypeID() { return nil }
         return value.doubleValue
     }
@@ -133,9 +125,8 @@ private enum LottieValidator {
 
 // MARK: - Bundle layout
 
+// Locates the assets directory (HTML templates and the vendored `lib/` runtime), two levels above the executable.
 private enum BundleLayout {
-    /// Assets (the HTML templates and the vendored `lib/` runtime) live two
-    /// directories above the executable, next to the bundle assets.
     static func assetsDirectory() throws -> URL {
         guard let executablePath = Bundle.main.executablePath else {
             throw PreviewError.missingTemplate("assets")
@@ -148,10 +139,8 @@ private enum BundleLayout {
 
 // MARK: - HTML rendering
 
+// Fills the bundled template with the document's data-type marker; the payload is fetched separately via the scheme handler.
 private enum HTMLRenderer {
-    /// Fills the bundled template for `document` with its data-type marker. The
-    /// payload itself is no longer inlined; the page fetches it from the scheme
-    /// handler, avoiding a base64 round-trip and several large in-memory copies.
     static func render(_ document: PreviewDocument) -> Result<String, PreviewError> {
         do {
             let template = try String(contentsOf: templateURL(for: document.type), encoding: .utf8)
@@ -164,8 +153,7 @@ private enum HTMLRenderer {
         }
     }
 
-    /// A standalone page shown when a template can't be loaded, so a render
-    /// failure surfaces in the window instead of crashing the process.
+    // A standalone page shown when a template can't load, so a render failure surfaces in the window instead of crashing.
     static func errorPage(_ error: PreviewError) -> String {
         let message = (error.errorDescription ?? "Unable to render preview.")
             .replacingOccurrences(of: "<", with: "&lt;")
@@ -188,10 +176,8 @@ private enum HTMLRenderer {
 
 // MARK: - Custom scheme handler
 
-/// Serves the preview page, the vendored runtime, and the raw animation bytes
-/// from a single in-process origin (`motion://app/`). Giving the page a real
-/// origin lets it `fetch()` its payload and load the renderer/WASM locally —
-/// no CDN round-trip, no base64 inlining, and it works fully offline.
+// Serves the page, the vendored runtime, and the raw animation bytes from one in-process origin (motion://app/), giving
+// the page a real origin so it can fetch its payload and load the renderer locally — fully offline, with no base64 inlining.
 private final class PreviewSchemeHandler: NSObject, WKURLSchemeHandler {
     static let scheme = "motion"
     static let baseURL = URL(string: "\(scheme)://app/index.html")
@@ -232,8 +218,8 @@ private final class PreviewSchemeHandler: NSObject, WKURLSchemeHandler {
 
     func webView(_ webView: WKWebView, stop task: WKURLSchemeTask) {}
 
-    /// Maps a `motion://app/<path>` request to bytes: the rendered page, the
-    /// animation payload (`/data`), or a vendored runtime asset (`/lib/...`).
+    // Maps a motion://app/<path> request to bytes: the rendered page, the animation payload (/data), or a vendored
+    // `lib/` asset — rejecting any path that tries to traverse out of the assets directory.
     private func payload(for url: URL) -> (data: Data, mimeType: String)? {
         switch url.path {
         case "", "/", "/index.html":
@@ -248,8 +234,6 @@ private final class PreviewSchemeHandler: NSObject, WKURLSchemeHandler {
             return (document.data, document.type.dataMimeType)
 
         default:
-            // Anything else must be a vendored file under `lib/`. Reject paths
-            // that try to escape the assets directory.
             let relativePath = String(url.path.drop(while: { $0 == "/" }))
             guard relativePath.hasPrefix("lib/"), !relativePath.contains("..") else { return nil }
 
@@ -271,6 +255,7 @@ private final class PreviewSchemeHandler: NSObject, WKURLSchemeHandler {
 
 // MARK: - Views
 
+// Hosts the WKWebView that loads the preview page from the custom scheme, falling back to the error page if assets are missing.
 private struct MotionWebView: NSViewRepresentable {
     let document: PreviewDocument
 
@@ -278,8 +263,6 @@ private struct MotionWebView: NSViewRepresentable {
         let configuration = WKWebViewConfiguration()
 
         guard let assetsDirectory = try? BundleLayout.assetsDirectory() else {
-            // Without the assets directory we can't serve the runtime; show the
-            // error page directly so the window isn't blank.
             let webView = WKWebView(frame: .zero, configuration: configuration)
             let error = PreviewError.missingTemplate(document.type.templateName)
             webView.loadHTMLString(HTMLRenderer.errorPage(error), baseURL: nil)
@@ -296,10 +279,10 @@ private struct MotionWebView: NSViewRepresentable {
         return webView
     }
 
-    // The document is immutable, so there is nothing to reload after the initial load.
     func updateNSView(_ nsView: WKWebView, context: Context) {}
 }
 
+// The framed animation card centered over a dimmed, click-to-dismiss backdrop.
 private struct ContentView: View {
     let document: PreviewDocument
     let onClose: () -> Void
@@ -322,11 +305,13 @@ private struct ContentView: View {
 
 // MARK: - Window & app lifecycle
 
+// A borderless floating panel that can still become key, so it receives the Escape key.
 private final class PreviewWindow: NSPanel {
     override var canBecomeKey: Bool { true }
     override var canBecomeMain: Bool { true }
 }
 
+// Builds and shows the floating preview window, and tears the app down on close or Escape (key code 53).
 private final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
     private let document: PreviewDocument
     private var window: PreviewWindow?
@@ -359,9 +344,8 @@ private final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelega
         window.makeKeyAndOrderFront(nil)
         NSApp.activate(ignoringOtherApps: true)
 
-        // Dismiss on Escape.
         escapeMonitor = NSEvent.addLocalMonitorForEvents(matching: [.keyDown]) { [weak self] event in
-            guard event.keyCode == 53 else { return event } // 53 == Escape
+            guard event.keyCode == 53 else { return event }
             self?.terminate()
             return nil
         }
@@ -386,6 +370,7 @@ private final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelega
 
 // MARK: - Raycast entry point
 
+// Validates the path and file type, reads the bytes, validates Lottie JSON up front, then runs the accessory app (no Dock icon) that shows the window.
 @raycast func previewFile(filePath: String) throws {
     guard !filePath.isEmpty else {
         throw PreviewError.emptyPath
@@ -400,9 +385,6 @@ private final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelega
         throw PreviewError.unreadableFile(filePath)
     }
 
-    // Validate Lottie JSON up front so a bad file surfaces as a message instead
-    // of an empty preview window. Binary formats (.riv, .lottie) are left to the
-    // renderer.
     if case .lottieJSON = fileType {
         try LottieValidator.validate(data)
     }
@@ -411,7 +393,7 @@ private final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelega
 
     let app = NSApplication.shared
     app.delegate = delegate
-    app.setActivationPolicy(.accessory) // Run as an accessory; no Dock icon.
+    app.setActivationPolicy(.accessory)
     app.activate(ignoringOtherApps: true)
     app.run()
 }
